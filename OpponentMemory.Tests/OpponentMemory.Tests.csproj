@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <PlatformTarget>x64</PlatformTarget>
+    <Platforms>x64</Platforms>
+    <LangVersion>10</LangVersion>
+    <Nullable>enable</Nullable>
+    <Deterministic>true</Deterministic>
+    <DebugType>portable</DebugType>
+    <PathMap>$(MSBuildProjectDirectory)=/_/OpponentMemory.Tests</PathMap>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\OpponentMemory\OpponentMemory.csproj" />
+  </ItemGroup>
+</Project>
