@@ -23,6 +23,11 @@ namespace OpponentMemory.Tests
 			SettingsAreClamped();
 			StandardLeaderboardWaitsForEightPlayers();
 			PartialLeaderboardRequiresStability();
+			MatchIdentityUsesNewStatsHandleAfterMenu();
+			MatchIdentityPreservesMatchingHandleAfterMenu();
+			MatchIdentityWaitsForAmbiguousConflict();
+			MatchIdentityPreservesStoredHandleDuringActiveConflict();
+			MatchEndPolicyRequiresAConfirmedResult();
 			Console.WriteLine("All Opponent Memory tests passed.");
 			return 0;
 		}
@@ -140,6 +145,41 @@ namespace OpponentMemory.Tests
 			for(var index = 1; index <= count; index++)
 				players.Add(new LeaderboardPlayer(index, index, index == 1, false));
 			return players;
+		}
+
+		private static void MatchIdentityUsesNewStatsHandleAfterMenu()
+		{
+			var snapshot = new GameHandleSnapshot(100, 200);
+			var decision = MatchIdentityResolver.Evaluate(100, true, snapshot);
+			Equal(MatchIdentityAction.StartNew, decision.Action, "new stats handle starts a new match");
+			Equal<uint?>(200, decision.GameHandle, "new stats handle is selected");
+		}
+
+		private static void MatchIdentityPreservesMatchingHandleAfterMenu()
+		{
+			var decision = MatchIdentityResolver.Evaluate(100, true, new GameHandleSnapshot(100, 100));
+			Equal(MatchIdentityAction.Preserve, decision.Action, "matching handles preserve state");
+			Equal<uint?>(100, decision.GameHandle, "matching handle remains active");
+		}
+
+		private static void MatchIdentityWaitsForAmbiguousConflict()
+		{
+			var decision = MatchIdentityResolver.Evaluate(100, true, new GameHandleSnapshot(200, 300));
+			Equal(MatchIdentityAction.Wait, decision.Action, "unrelated conflicting handles wait for stable data");
+		}
+
+		private static void MatchIdentityPreservesStoredHandleDuringActiveConflict()
+		{
+			var decision = MatchIdentityResolver.Evaluate(200, false, new GameHandleSnapshot(100, 200));
+			Equal(MatchIdentityAction.Preserve, decision.Action, "active match keeps its known handle during a transient conflict");
+			Equal<uint?>(200, decision.GameHandle, "known active handle is retained");
+		}
+
+		private static void MatchEndPolicyRequiresAConfirmedResult()
+		{
+			False(MatchEndPolicy.ShouldClearState(false, false), "missing game stats do not clear match state");
+			False(MatchEndPolicy.ShouldClearState(true, false), "pending result does not clear match state");
+			True(MatchEndPolicy.ShouldClearState(true, true), "confirmed result clears match state");
 		}
 
 		private static void True(bool value, string name) { if(!value) throw new InvalidOperationException(name); }

@@ -9,7 +9,7 @@ namespace OpponentMemory
 {
 	public sealed class OpponentMemoryPlugin : IPlugin
 	{
-		public const string DisplayVersion = "1.0";
+		public const string DisplayVersion = "1.1";
 		private readonly EncounterTracker _tracker = new EncounterTracker();
 		private readonly BattlegroundsPlayerResolver _resolver = new BattlegroundsPlayerResolver();
 		private readonly OpponentMemoryOverlay _overlay = new OpponentMemoryOverlay();
@@ -33,7 +33,7 @@ namespace OpponentMemory
 		public string Description => "Tracks how many times you have faced each opponent in Hearthstone Battlegrounds.";
 		public string ButtonText => "Settings";
 		public string Author => "";
-		public Version Version => new Version(1, 0, 0, 0);
+		public Version Version => new Version(1, 1, 0, 0);
 		public MenuItem MenuItem => _menuItem ??= BuildMenu();
 
 		public void OnLoad()
@@ -70,15 +70,18 @@ namespace OpponentMemory
 							CompleteActiveCombat();
 							_wasCombat = false;
 						}
-						_sawMenu = true;
+						if(_resolver.HasDefinitiveMatchResult())
+							ResetMatchState();
+						else
+							_sawMenu = true;
 					}
 					_wasSupported = false;
 					InvokeUi(_overlay.Hide);
 					return;
 				}
 				var round = _resolver.GetRound();
-				var currentGameHandle = _resolver.GetGameHandle();
-				if(!PrepareMatchState(currentGameHandle))
+				var gameHandles = _resolver.GetGameHandles();
+				if(!PrepareMatchState(gameHandles))
 				{
 					InvokeUi(_overlay.Hide);
 					return;
@@ -136,30 +139,28 @@ namespace OpponentMemory
 			_forceOverlayRefresh = true;
 		}
 
-		private bool PrepareMatchState(uint? currentGameHandle)
+		private bool PrepareMatchState(GameHandleSnapshot gameHandles)
 		{
 			if(!_hasMatchState)
 			{
-				InitializeNewMatch(currentGameHandle);
-				return true;
-			}
-			if(_sawMenu)
-			{
-				if(!currentGameHandle.HasValue)
+				if(gameHandles.HasConflict)
 					return false;
-				if(_gameHandle.HasValue && currentGameHandle.Value == _gameHandle.Value)
-					_sawMenu = false;
-				else
-					InitializeNewMatch(currentGameHandle);
+				InitializeNewMatch(gameHandles.AvailableHandle);
 				return true;
 			}
-			if(currentGameHandle.HasValue && _gameHandle.HasValue && currentGameHandle.Value != _gameHandle.Value)
+
+			var decision = MatchIdentityResolver.Evaluate(_gameHandle, _sawMenu, gameHandles);
+			if(decision.Action == MatchIdentityAction.Wait)
+				return false;
+			if(decision.Action == MatchIdentityAction.StartNew)
 			{
-				InitializeNewMatch(currentGameHandle);
+				InitializeNewMatch(decision.GameHandle);
 				return true;
 			}
-			if(currentGameHandle.HasValue)
-				_gameHandle = currentGameHandle;
+
+			_sawMenu = false;
+			if(decision.GameHandle.HasValue)
+				_gameHandle = decision.GameHandle;
 			return true;
 		}
 

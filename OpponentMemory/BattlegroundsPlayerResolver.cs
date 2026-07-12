@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using HearthDb.Enums;
 using Hearthstone_Deck_Tracker;
+using Hearthstone_Deck_Tracker.Enums;
 using Hearthstone_Deck_Tracker.Hearthstone.Entities;
 
 namespace OpponentMemory
@@ -17,13 +18,19 @@ namespace OpponentMemory
 
 		public int GetRound() => Core.Game?.GetTurnNumber() ?? 0;
 		public bool RequiresEightPlayerLeaderboard() => Core.Game?.CurrentGameType == GameType.GT_BATTLEGROUNDS;
-		public uint? GetGameHandle()
+		public GameHandleSnapshot GetGameHandles()
 		{
 			var metadataHandle = Core.Game?.MetaData.ServerInfo?.GameHandle ?? 0;
-			if(metadataHandle > 0)
-				return metadataHandle;
 			var statsHandle = Core.Game?.CurrentGameStats?.ServerInfo?.GameHandle ?? 0;
-			return statsHandle > 0 ? statsHandle : (uint?)null;
+			return new GameHandleSnapshot(
+				metadataHandle > 0 ? metadataHandle : (uint?)null,
+				statsHandle > 0 ? statsHandle : (uint?)null);
+		}
+
+		public bool HasDefinitiveMatchResult()
+		{
+			var stats = Core.Game?.CurrentGameStats;
+			return MatchEndPolicy.ShouldClearState(stats != null, stats != null && stats.Result != GameResult.None);
 		}
 		public int? GetScheduledOpponentPlayerId()
 		{
