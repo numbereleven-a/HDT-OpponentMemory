@@ -9,7 +9,7 @@ namespace OpponentMemory
 {
 	public sealed class OpponentMemoryPlugin : IPlugin
 	{
-		public const string DisplayVersion = "1.1";
+		public const string DisplayVersion = "1.2";
 		private readonly EncounterTracker _tracker = new EncounterTracker();
 		private readonly BattlegroundsPlayerResolver _resolver = new BattlegroundsPlayerResolver();
 		private readonly OpponentMemoryOverlay _overlay = new OpponentMemoryOverlay();
@@ -28,12 +28,16 @@ namespace OpponentMemory
 		private const int OverlayRefreshIntervalMs = 300;
 		private readonly Stopwatch _overlayRefresh = Stopwatch.StartNew();
 		private bool _forceOverlayRefresh = true;
+		private int? _ghostStatusRound;
+		private int? _ghostStatusPlayerId;
+		private bool _cachedScheduledIsGhost;
+		private bool _overlayHiddenForBackground;
 
 		public string Name => "Opponent Memory";
 		public string Description => "Tracks how many times you have faced each opponent in Hearthstone Battlegrounds.";
 		public string ButtonText => "Settings";
 		public string Author => "";
-		public Version Version => new Version(1, 1, 0, 0);
+		public Version Version => new Version(1, 2);
 		public MenuItem MenuItem => _menuItem ??= BuildMenu();
 
 		public void OnLoad()
@@ -88,7 +92,6 @@ namespace OpponentMemory
 				}
 				var combat = Core.Game.IsBattlegroundsCombatPhase;
 				var scheduled = _resolver.GetScheduledOpponentPlayerId();
-				var scheduledIsGhost = scheduled is > 0 && _resolver.IsGhostOpponent(scheduled.Value);
 				if(!_wasSupported)
 				{
 					_wasSupported = true;
@@ -101,13 +104,26 @@ namespace OpponentMemory
 				{
 					if(_tracker.ActiveCombatOpponentPlayerId == null)
 					{
+						var scheduledIsGhost = GetScheduledGhostStatus(round, scheduled, true);
 						_tracker.Schedule(round, scheduled, scheduledIsGhost);
 						_tracker.StartCombat(round);
 					}
 				}
 				else
-					_tracker.Schedule(round, scheduled, scheduledIsGhost);
+					_tracker.Schedule(round, scheduled, GetScheduledGhostStatus(round, scheduled, false));
 				_wasCombat = combat;
+				if(!User32.IsHearthstoneInForeground())
+				{
+					if(!_overlayHiddenForBackground)
+						InvokeUi(_overlay.Hide);
+					_overlayHiddenForBackground = true;
+					return;
+				}
+				if(_overlayHiddenForBackground)
+				{
+					_overlayHiddenForBackground = false;
+					_forceOverlayRefresh = true;
+				}
 				if(_forceOverlayRefresh || _overlayRefresh.ElapsedMilliseconds >= OverlayRefreshIntervalMs)
 				{
 					_forceOverlayRefresh = false;
@@ -137,6 +153,28 @@ namespace OpponentMemory
 			var countEncounter = _settings.CountGhostEncounters || !_tracker.ActiveCombatWasGhost;
 			_tracker.CompleteCombat(countEncounter);
 			_forceOverlayRefresh = true;
+		}
+
+		private bool GetScheduledGhostStatus(int round, int? playerId, bool forceRefresh)
+		{
+			if(playerId is not > 0)
+				return false;
+			if(forceRefresh || _ghostStatusRound != round || _ghostStatusPlayerId != playerId)
+			{
+				var isGhost = _resolver.IsGhostOpponent(playerId.Value);
+				_ghostStatusRound = round;
+				_ghostStatusPlayerId = playerId;
+				_cachedScheduledIsGhost = isGhost;
+			}
+			return _cachedScheduledIsGhost;
+		}
+
+		private void ResetGhostStatusCache()
+		{
+			_ghostStatusRound = null;
+			_ghostStatusPlayerId = null;
+			_cachedScheduledIsGhost = false;
+			_overlayHiddenForBackground = false;
 		}
 
 		private bool PrepareMatchState(GameHandleSnapshot gameHandles)
@@ -173,6 +211,7 @@ namespace OpponentMemory
 			_wasCombat = null;
 			_wasSupported = false;
 			_leaderboardReadiness.Reset();
+			ResetGhostStatusCache();
 			_forceOverlayRefresh = true;
 			PluginLogger.Info("New match state initialized.");
 		}
@@ -186,6 +225,7 @@ namespace OpponentMemory
 			_sawMenu = false;
 			_gameHandle = null;
 			_leaderboardReadiness.Reset();
+			ResetGhostStatusCache();
 		}
 
 		private MenuItem BuildMenu()
