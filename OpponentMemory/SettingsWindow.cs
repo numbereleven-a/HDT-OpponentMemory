@@ -12,11 +12,12 @@ namespace OpponentMemory
 		private readonly OpponentMemorySettings _settings;
 		private readonly Action _apply;
 		private OpponentMemorySettings _draft;
-		private CheckBox _enabled = null!, _counts = null!, _highlight = null!, _zeros = null!, _ghosts = null!, _bold = null!;
+		private CheckBox _enabled = null!, _counts = null!, _highlight = null!, _resultColors = null!, _resultColorsInColors = null!, _zeros = null!, _ghosts = null!, _bold = null!;
 		private ComboBox _side = null!;
 		private Slider _horizontal = null!, _perRowHorizontal = null!, _vertical = null!, _nextOffset = null!, _scale = null!, _fontSize = null!, _textOpacity = null!, _backgroundOpacity = null!;
 		private ComboBox _font = null!;
-		private ComboBox _normal = null!, _last = null!, _background = null!;
+		private ComboBox _normal = null!, _last = null!, _win = null!, _loss = null!, _draw = null!, _background = null!;
+		private TextBlock _colorWarning = null!;
 
 		public SettingsWindow(OpponentMemorySettings settings, Action apply)
 		{
@@ -40,6 +41,8 @@ namespace OpponentMemory
 			var tabs = new TabControl();
 			tabs.Items.Add(new TabItem { Header = "General", Content = BuildGeneralTab() });
 			tabs.Items.Add(new TabItem { Header = "Visual", Content = BuildVisualTab() });
+			tabs.Items.Add(new TabItem { Header = "Colors", Content = BuildColorsTab() });
+			UpdateColorControls();
 			Grid.SetRow(tabs, 0); root.Children.Add(tabs);
 			var bottom = new DockPanel { Margin = new Thickness(0, 12, 0, 0) };
 			bottom.Children.Add(new TextBlock { Text = "Version " + OpponentMemoryPlugin.DisplayVersion, VerticalAlignment = VerticalAlignment.Center, Opacity = .65 });
@@ -61,6 +64,9 @@ namespace OpponentMemory
 			AddLabel(panel, "Counter side"); panel.Children.Add(_side);
 			_counts = AddCheck(panel, "Show encounter counts", _draft.ShowEncounterCounts);
 			_highlight = AddCheck(panel, "Highlight last opponent", _draft.HighlightLastOpponent);
+			_resultColors = AddCheck(panel, "Color last opponent by combat result", _draft.ColorLastOpponentByCombatResult);
+			_highlight.Checked += (_, __) => UpdateColorControls(); _highlight.Unchecked += (_, __) => UpdateColorControls();
+			_resultColors.Checked += (_, __) => SyncResultColorControls(_resultColors); _resultColors.Unchecked += (_, __) => SyncResultColorControls(_resultColors);
 			_zeros = AddCheck(panel, "Show zero values", _draft.ShowZeroValues);
 			_ghosts = AddCheck(panel, "Count ghost encounters", _draft.CountGhostEncounters);
 			var defaults = new Button { Content = "Reset settings", HorizontalAlignment = HorizontalAlignment.Left, MinWidth = 120, Margin = new Thickness(0, 4, 0, 0) };
@@ -83,8 +89,27 @@ namespace OpponentMemory
 			_backgroundOpacity = AddSlider(panel, "Background opacity", 0, 100, 1, _draft.BackgroundOpacity, "%");
 			_font = AddFontPicker(panel, "Font", _draft.FontFamily);
 			_bold = AddCheck(panel, "Bold text", _draft.BoldText);
+			return new ScrollViewer { Content = panel };
+		}
+
+		private UIElement BuildColorsTab()
+		{
+			var panel = NewPanel();
+			AddLabel(panel, "Text colors");
 			_normal = AddColorPicker(panel, "Normal text color", _draft.NormalTextColor);
 			_last = AddColorPicker(panel, "Last opponent text color", _draft.LastOpponentTextColor);
+			_resultColorsInColors = AddCheck(panel, "Color last opponent by combat result", _draft.ColorLastOpponentByCombatResult);
+			_resultColorsInColors.Checked += (_, __) => SyncResultColorControls(_resultColorsInColors); _resultColorsInColors.Unchecked += (_, __) => SyncResultColorControls(_resultColorsInColors);
+			panel.Children.Add(new TextBlock { Text = "Used when combat-result coloring is off or the result is unknown.", Opacity = .65, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, -6, 0, 10) });
+			panel.Children.Add(new Separator { Margin = new Thickness(0, 4, 0, 12) });
+			AddLabel(panel, "Combat result colors");
+			_win = AddColorPicker(panel, "Win color", _draft.WinTextColor);
+			_loss = AddColorPicker(panel, "Loss color", _draft.LossTextColor);
+			_draw = AddColorPicker(panel, "Draw color", _draft.DrawTextColor);
+			_colorWarning = new TextBlock { Text = "Some selected colors match. Combat results or the last opponent may be difficult to distinguish.", Foreground = Brushes.DarkOrange, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) };
+			panel.Children.Add(_colorWarning);
+			panel.Children.Add(new Separator { Margin = new Thickness(0, 14, 0, 12) });
+			AddLabel(panel, "Background");
 			_background = AddColorPicker(panel, "Background color", _draft.BackgroundColor);
 			return new ScrollViewer { Content = panel };
 		}
@@ -94,18 +119,19 @@ namespace OpponentMemory
 			_draft.Enabled = _enabled.IsChecked == true;
 			_draft.CounterSide = _side.SelectedItem is CounterSide side ? side : CounterSide.Right;
 			_draft.ShowEncounterCounts = _counts.IsChecked == true; _draft.HighlightLastOpponent = _highlight.IsChecked == true;
+			_draft.ColorLastOpponentByCombatResult = _resultColors.IsChecked == true;
 			_draft.ShowZeroValues = _zeros.IsChecked == true; _draft.CountGhostEncounters = _ghosts.IsChecked == true;
 			_draft.HorizontalOffset = _horizontal.Value; _draft.PerRowHorizontalOffset = _perRowHorizontal.Value; _draft.VerticalOffset = _vertical.Value; _draft.NextOpponentExtraOffset = _nextOffset.Value;
 			_draft.Scale = _scale.Value / 100d; _draft.FontSize = _fontSize.Value; _draft.TextOpacity = _textOpacity.Value; _draft.BackgroundOpacity = _backgroundOpacity.Value;
-			_draft.FontFamily = _font.Text; _draft.BoldText = _bold.IsChecked == true; _draft.NormalTextColor = ColorValue(_normal); _draft.LastOpponentTextColor = ColorValue(_last); _draft.BackgroundColor = ColorValue(_background);
+			_draft.FontFamily = _font.Text; _draft.BoldText = _bold.IsChecked == true; _draft.NormalTextColor = ColorValue(_normal); _draft.LastOpponentTextColor = ColorValue(_last); _draft.WinTextColor = ColorValue(_win); _draft.LossTextColor = ColorValue(_loss); _draft.DrawTextColor = ColorValue(_draw); _draft.BackgroundColor = ColorValue(_background);
 			_draft.Normalize(); _settings.CopyFrom(_draft); _settings.Save(); _apply();
 		}
 
 		private void Populate()
 		{
-			_enabled.IsChecked = _draft.Enabled; _side.SelectedItem = _draft.CounterSide; _counts.IsChecked = _draft.ShowEncounterCounts; _highlight.IsChecked = _draft.HighlightLastOpponent; _zeros.IsChecked = _draft.ShowZeroValues; _ghosts.IsChecked = _draft.CountGhostEncounters;
+			_enabled.IsChecked = _draft.Enabled; _side.SelectedItem = _draft.CounterSide; _counts.IsChecked = _draft.ShowEncounterCounts; _highlight.IsChecked = _draft.HighlightLastOpponent; _resultColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _resultColorsInColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _zeros.IsChecked = _draft.ShowZeroValues; _ghosts.IsChecked = _draft.CountGhostEncounters;
 			_horizontal.Value = _draft.HorizontalOffset; _perRowHorizontal.Value = _draft.PerRowHorizontalOffset; _vertical.Value = _draft.VerticalOffset; _nextOffset.Value = _draft.NextOpponentExtraOffset; _scale.Value = _draft.Scale * 100; _fontSize.Value = _draft.FontSize; _textOpacity.Value = _draft.TextOpacity; _backgroundOpacity.Value = _draft.BackgroundOpacity;
-			_font.Text = _draft.FontFamily; _bold.IsChecked = _draft.BoldText; SelectColor(_normal, _draft.NormalTextColor); SelectColor(_last, _draft.LastOpponentTextColor); SelectColor(_background, _draft.BackgroundColor);
+			_font.Text = _draft.FontFamily; _bold.IsChecked = _draft.BoldText; SelectColor(_normal, _draft.NormalTextColor); SelectColor(_last, _draft.LastOpponentTextColor); SelectColor(_win, _draft.WinTextColor); SelectColor(_loss, _draft.LossTextColor); SelectColor(_draw, _draft.DrawTextColor); SelectColor(_background, _draft.BackgroundColor); UpdateColorControls();
 		}
 
 		private static StackPanel NewPanel() => new StackPanel { Margin = new Thickness(12) };
@@ -121,15 +147,54 @@ namespace OpponentMemory
 			panel.Children.Add(picker); return picker;
 		}
 		private static readonly string[] PopularFonts = { "Segoe UI", "Arial", "Calibri", "Tahoma", "Verdana", "Trebuchet MS", "Georgia", "Times New Roman", "Consolas", "Courier New" };
-		private static ComboBox AddColorPicker(Panel panel, string label, string value)
+		private ComboBox AddColorPicker(Panel panel, string label, string value)
 		{
 			AddLabel(panel, label);
 			var picker = new ComboBox { IsEditable = true, ItemsSource = ColorOptions, Text = value, Margin = new Thickness(0, 0, 0, 10) };
+			picker.SelectionChanged += (_, __) => UpdateColorControls();
+			picker.AddHandler(TextBox.TextChangedEvent, new TextChangedEventHandler((_, __) => UpdateColorControls()));
 			panel.Children.Add(picker); return picker;
 		}
 		private static readonly string[] ColorOptions = { "Transparent", "White", "Black", "Red", "Green", "Blue", "Yellow", "Orange", "Purple", "Pink", "Cyan", "Lime", "Gold" };
 		private static string ColorValue(ComboBox picker) => string.IsNullOrWhiteSpace(picker.Text) ? "Transparent" : picker.Text;
 		private static void SelectColor(ComboBox picker, string value) { picker.SelectedItem = value; picker.Text = value; }
+		private void UpdateColorControls()
+		{
+			if(_highlight == null || _resultColors == null || _resultColorsInColors == null || _last == null || _win == null || _loss == null || _draw == null || _colorWarning == null)
+				return;
+			var highlightEnabled = _highlight.IsChecked == true;
+			var resultColorsEnabled = highlightEnabled && _resultColors.IsChecked == true;
+			_resultColors.IsEnabled = highlightEnabled;
+			_resultColorsInColors.IsEnabled = highlightEnabled;
+			_last.IsEnabled = highlightEnabled && !resultColorsEnabled;
+			_win.IsEnabled = resultColorsEnabled;
+			_loss.IsEnabled = resultColorsEnabled;
+			_draw.IsEnabled = resultColorsEnabled;
+			_colorWarning.Visibility = resultColorsEnabled && HasColorConflict() ? Visibility.Visible : Visibility.Collapsed;
+		}
+
+		private void SyncResultColorControls(CheckBox source)
+		{
+			var value = source.IsChecked == true;
+			if(_resultColors != null && !ReferenceEquals(source, _resultColors))
+				_resultColors.IsChecked = value;
+			if(_resultColorsInColors != null && !ReferenceEquals(source, _resultColorsInColors))
+				_resultColorsInColors.IsChecked = value;
+			UpdateColorControls();
+		}
+
+		private bool HasColorConflict()
+		{
+			var normal = ParsedColor(_normal.Text);
+			var outcomes = new[] { ParsedColor(_win.Text), ParsedColor(_loss.Text), ParsedColor(_draw.Text) };
+			return outcomes.Any(color => color == normal) || outcomes.Distinct().Count() < outcomes.Length;
+		}
+
+		private static string ParsedColor(string value)
+		{
+			try { return ((Color)ColorConverter.ConvertFromString(value)).ToString(); }
+			catch { return value.Trim().ToUpperInvariant(); }
+		}
 		private static Slider AddSlider(Panel panel, string label, double min, double max, double tick, double value, string suffix = "")
 		{
 			var line = new DockPanel { Margin = new Thickness(0, 0, 0, 3), LastChildFill = true };

@@ -1,16 +1,21 @@
 using System;
 using System.Diagnostics;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using HearthDb.Enums;
 using Hearthstone_Deck_Tracker;
 using Hearthstone_Deck_Tracker.Plugins;
+using GameEvents = Hearthstone_Deck_Tracker.API.GameEvents;
+using PredamageInfo = Hearthstone_Deck_Tracker.API.PredamageInfo;
 
 namespace OpponentMemory
 {
 	public sealed class OpponentMemoryPlugin : IPlugin
 	{
-		public const string DisplayVersion = "1.2";
+		public const string DisplayVersion = "1.3";
 		private readonly EncounterTracker _tracker = new EncounterTracker();
+		private readonly CombatResultTracker _combatResultTracker = new CombatResultTracker();
 		private readonly BattlegroundsPlayerResolver _resolver = new BattlegroundsPlayerResolver();
 		private readonly OpponentMemoryOverlay _overlay = new OpponentMemoryOverlay();
 		private readonly LeaderboardReadiness _leaderboardReadiness = new LeaderboardReadiness();
@@ -32,18 +37,21 @@ namespace OpponentMemory
 		private int? _ghostStatusPlayerId;
 		private bool _cachedScheduledIsGhost;
 		private bool _overlayHiddenForBackground;
+		private CombatOutcome _lastCombatOutcome;
+		private int _eventGeneration;
 
 		public string Name => "Opponent Memory";
 		public string Description => "Tracks how many times you have faced each opponent in Hearthstone Battlegrounds.";
 		public string ButtonText => "Settings";
 		public string Author => "";
-		public Version Version => new Version(1, 2);
+		public Version Version => new Version(1, 3);
 		public MenuItem MenuItem => _menuItem ??= BuildMenu();
 
 		public void OnLoad()
 		{
 			_settings = OpponentMemorySettings.Load();
 			_loaded = true;
+			RegisterCombatResultEventHandler();
 			InvokeUi(_overlay.Attach);
 			PluginLogger.Info("Loaded.");
 		}
@@ -51,6 +59,7 @@ namespace OpponentMemory
 		public void OnUnload()
 		{
 			_loaded = false;
+			Interlocked.Increment(ref _eventGeneration);
 			ResetMatchState();
 			InvokeUi(() => { _settingsWindow?.Close(); _settingsWindow = null; _overlay.Detach(); });
 			_settings.Save();
@@ -71,7 +80,7 @@ namespace OpponentMemory
 					{
 						if(_tracker.ActiveCombatOpponentPlayerId is > 0)
 						{
-							CompleteActiveCombat();
+							CompleteActiveCombat(false);
 							_wasCombat = false;
 						}
 						if(_resolver.HasDefinitiveMatchResult())
@@ -106,7 +115,17 @@ namespace OpponentMemory
 					{
 						var scheduledIsGhost = GetScheduledGhostStatus(round, scheduled, true);
 						_tracker.Schedule(round, scheduled, scheduledIsGhost);
-						_tracker.StartCombat(round);
+						if(_tracker.StartCombat(round) && _tracker.ActiveCombatOpponentPlayerId is > 0)
+						{
+							var localPlayerId = _resolver.GetLocalPlayerId();
+							var opponentPlayerId = _tracker.ActiveCombatOpponentPlayerId.Value;
+							_combatResultTracker.StartCombat(
+								localPlayerId,
+								opponentPlayerId,
+								_resolver.GetHeroDurability(localPlayerId),
+								_resolver.GetHeroDurability(opponentPlayerId),
+								_tracker.ActiveCombatWasGhost);
+						}
 					}
 				}
 				else
@@ -130,7 +149,7 @@ namespace OpponentMemory
 					_overlayRefresh.Restart();
 					var players = _resolver.GetLeaderboardPlayers();
 					if(_leaderboardReadiness.IsReady(players, _resolver.RequiresEightPlayerLeaderboard(), DateTime.UtcNow))
-						InvokeUi(() => _overlay.Update(players, _tracker, _settings, scheduled));
+						InvokeUi(() => _overlay.Update(players, _tracker, _lastCombatOutcome, _settings, scheduled));
 					else
 						InvokeUi(_overlay.Hide);
 				}
@@ -146,13 +165,49 @@ namespace OpponentMemory
 			}
 		}
 
-		private void CompleteActiveCombat()
+		private void CompleteActiveCombat(bool assumeDrawIfNoDamage = true)
 		{
 			if(_tracker.ActiveCombatOpponentPlayerId is not > 0)
 				return;
+			var localPlayerId = _resolver.GetLocalPlayerId();
+			var opponentPlayerId = _tracker.ActiveCombatOpponentPlayerId.Value;
+			var outcome = _combatResultTracker.CompleteCombat(
+				opponentPlayerId,
+				_resolver.GetHeroDurability(localPlayerId),
+				_resolver.GetHeroDurability(opponentPlayerId),
+				assumeDrawIfNoDamage);
 			var countEncounter = _settings.CountGhostEncounters || !_tracker.ActiveCombatWasGhost;
-			_tracker.CompleteCombat(countEncounter);
+			if(_tracker.CompleteCombat(countEncounter))
+				_lastCombatOutcome = outcome;
 			_forceOverlayRefresh = true;
+		}
+
+		private void RegisterCombatResultEventHandler()
+		{
+			var generation = Interlocked.Increment(ref _eventGeneration);
+			var weakPlugin = new WeakReference<OpponentMemoryPlugin>(this);
+			GameEvents.OnEntityWillTakeDamage.Add(info =>
+			{
+				if(weakPlugin.TryGetTarget(out var plugin))
+					plugin.HandleEntityWillTakeDamage(info, generation);
+			});
+		}
+
+		private void HandleEntityWillTakeDamage(PredamageInfo info, int generation)
+		{
+			if(!_loaded || Volatile.Read(ref _eventGeneration) != generation || info?.Entity == null || !info.Entity.IsHero)
+				return;
+			var game = Core.Game;
+			if(game == null || !game.IsBattlegroundsSoloMatch || game.IsBattlegroundsDuosMatch || !game.IsBattlegroundsCombatPhase || game.Player.Id <= 0 || _tracker.ActiveCombatOpponentPlayerId is not > 0)
+				return;
+			var localPlayerId = _resolver.GetLocalPlayerId();
+			var opponentPlayerId = _tracker.ActiveCombatOpponentPlayerId.Value;
+			var entityPlayerId = info.Entity.GetTag(GameTag.PLAYER_ID);
+			var opponentControllerId = game.Opponent.Id;
+			if(entityPlayerId == localPlayerId || info.Entity.IsControlledBy(game.Player.Id))
+				_combatResultTracker.RecordHeroDamage(localPlayerId);
+			else if(entityPlayerId == opponentPlayerId || opponentControllerId > 0 && (entityPlayerId == opponentControllerId || info.Entity.IsControlledBy(opponentControllerId)))
+				_combatResultTracker.RecordHeroDamage(opponentPlayerId);
 		}
 
 		private bool GetScheduledGhostStatus(int round, int? playerId, bool forceRefresh)
@@ -205,6 +260,8 @@ namespace OpponentMemory
 		private void InitializeNewMatch(uint? gameHandle)
 		{
 			_tracker.Reset();
+			_combatResultTracker.Reset();
+			_lastCombatOutcome = CombatOutcome.Unknown;
 			_hasMatchState = true;
 			_gameHandle = gameHandle;
 			_sawMenu = false;
@@ -219,6 +276,8 @@ namespace OpponentMemory
 		private void ResetMatchState()
 		{
 			_tracker.Reset();
+			_combatResultTracker.Reset();
+			_lastCombatOutcome = CombatOutcome.Unknown;
 			_wasCombat = null;
 			_wasSupported = false;
 			_hasMatchState = false;

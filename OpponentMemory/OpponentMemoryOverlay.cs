@@ -17,6 +17,9 @@ namespace OpponentMemory
 		private FontFamily _fontFamily = new FontFamily("Segoe UI");
 		private Brush _normalBrush = Brushes.Green;
 		private Brush _lastBrush = Brushes.Red;
+		private Brush _winBrush = Brushes.Blue;
+		private Brush _lossBrush = Brushes.Red;
+		private Brush _drawBrush = Brushes.Yellow;
 		private Brush _backgroundBrush = Brushes.Transparent;
 		private bool _attached;
 
@@ -39,7 +42,7 @@ namespace OpponentMemory
 
 		public void Hide() => _canvas.Visibility = Visibility.Collapsed;
 
-		public void Update(IReadOnlyList<LeaderboardPlayer> players, EncounterTracker tracker, OpponentMemorySettings settings, int? scheduledOpponentId)
+		public void Update(IReadOnlyList<LeaderboardPlayer> players, EncounterTracker tracker, CombatOutcome lastCombatOutcome, OpponentMemorySettings settings, int? scheduledOpponentId)
 		{
 			var overlayCanvas = HdtApi.OverlayCanvas;
 			var width = overlayCanvas.ActualWidth;
@@ -73,7 +76,7 @@ namespace OpponentMemory
 				row.FontSize = settings.FontSize * settings.Scale;
 				row.FontWeight = settings.BoldText ? FontWeights.Bold : FontWeights.Normal;
 				row.Opacity = 1;
-				row.Foreground = settings.HighlightLastOpponent && isLastOpponent ? _lastBrush : _normalBrush;
+				row.Foreground = settings.HighlightLastOpponent && isLastOpponent ? GetLastOpponentBrush(settings, lastCombatOutcome) : _normalBrush;
 				row.Background = _backgroundBrush;
 				row.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
 				var rowWidth = row.DesiredSize.Width;
@@ -100,14 +103,30 @@ namespace OpponentMemory
 
 		private void UpdateStyleCache(OpponentMemorySettings settings)
 		{
-			var styleKey = string.Join("|", settings.FontFamily, settings.NormalTextColor, settings.LastOpponentTextColor, settings.BackgroundColor, settings.TextOpacity, settings.BackgroundOpacity);
+			var styleKey = string.Join("|", settings.FontFamily, settings.NormalTextColor, settings.LastOpponentTextColor, settings.WinTextColor, settings.LossTextColor, settings.DrawTextColor, settings.BackgroundColor, settings.TextOpacity, settings.BackgroundOpacity);
 			if(string.Equals(styleKey, _styleKey, StringComparison.Ordinal))
 				return;
 			_styleKey = styleKey;
 			_fontFamily = new FontFamily(settings.FontFamily);
 			_normalBrush = GetBrush(settings.NormalTextColor, Colors.Green, settings.TextOpacity / 100d);
 			_lastBrush = GetBrush(settings.LastOpponentTextColor, Colors.Red, settings.TextOpacity / 100d);
+			_winBrush = GetBrush(settings.WinTextColor, Colors.Blue, settings.TextOpacity / 100d);
+			_lossBrush = GetBrush(settings.LossTextColor, Colors.Red, settings.TextOpacity / 100d);
+			_drawBrush = GetBrush(settings.DrawTextColor, Colors.Yellow, settings.TextOpacity / 100d);
 			_backgroundBrush = GetBrush(settings.BackgroundColor, Colors.Transparent, settings.BackgroundOpacity / 100d);
+		}
+
+		private Brush GetLastOpponentBrush(OpponentMemorySettings settings, CombatOutcome outcome)
+		{
+			if(!settings.ColorLastOpponentByCombatResult)
+				return _lastBrush;
+			switch(outcome)
+			{
+				case CombatOutcome.Win: return _winBrush;
+				case CombatOutcome.Loss: return _lossBrush;
+				case CombatOutcome.Draw: return _drawBrush;
+				default: return _lastBrush;
+			}
 		}
 
 		private TextBlock GetRow(int playerId)

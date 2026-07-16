@@ -28,6 +28,13 @@ namespace OpponentMemory.Tests
 			MatchIdentityWaitsForAmbiguousConflict();
 			MatchIdentityPreservesStoredHandleDuringActiveConflict();
 			MatchEndPolicyRequiresAConfirmedResult();
+			CombatResultWinIsDetected();
+			CombatResultLossIsDetected();
+			CombatResultDrawIsDetected();
+			UncertainCombatResultRemainsUnknown();
+			DurabilityChangeOverridesAnIncorrectEvent();
+			GhostWinUsesTheDamageEvent();
+			CombatResultResetClearsActiveCombat();
 			Console.WriteLine("All Opponent Memory tests passed.");
 			return 0;
 		}
@@ -115,7 +122,7 @@ namespace OpponentMemory.Tests
 		private static void SettingsAreClamped()
 		{
 			var settings = new OpponentMemorySettings { Scale = 9, TextOpacity = -1, FontSize = double.NaN }; settings.Normalize();
-			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); True(settings.ShowEncounterCounts, "counts visible by default"); True(settings.HighlightLastOpponent, "highlight visible by default");
+			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); True(settings.ShowEncounterCounts, "counts visible by default"); True(settings.HighlightLastOpponent, "highlight visible by default"); False(settings.ColorLastOpponentByCombatResult, "result coloring is opt-in"); Equal("Blue", settings.WinTextColor, "default win color"); Equal("Red", settings.LossTextColor, "default loss color"); Equal("Yellow", settings.DrawTextColor, "default draw color");
 		}
 
 		private static void StandardLeaderboardWaitsForEightPlayers()
@@ -180,6 +187,48 @@ namespace OpponentMemory.Tests
 			False(MatchEndPolicy.ShouldClearState(false, false), "missing game stats do not clear match state");
 			False(MatchEndPolicy.ShouldClearState(true, false), "pending result does not clear match state");
 			True(MatchEndPolicy.ShouldClearState(true, true), "confirmed result clears match state");
+		}
+
+		private static void CombatResultWinIsDetected()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, null, null, false); tracker.RecordHeroDamage(2);
+			Equal(CombatOutcome.Win, tracker.CompleteCombat(2, null, null, true), "opponent damage means a win");
+		}
+
+		private static void CombatResultLossIsDetected()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, null, null, false); tracker.RecordHeroDamage(1);
+			Equal(CombatOutcome.Loss, tracker.CompleteCombat(2, null, null, true), "local damage means a loss");
+		}
+
+		private static void CombatResultDrawIsDetected()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, 40, 40, false);
+			Equal(CombatOutcome.Draw, tracker.CompleteCombat(2, 40, 40, true), "completed combat without hero damage means a draw");
+		}
+
+		private static void UncertainCombatResultRemainsUnknown()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, null, null, false);
+			Equal(CombatOutcome.Unknown, tracker.CompleteCombat(2, null, null, false), "uncertain completion does not invent a draw");
+		}
+
+		private static void DurabilityChangeOverridesAnIncorrectEvent()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, 40, 40, false); tracker.RecordHeroDamage(2);
+			Equal(CombatOutcome.Loss, tracker.CompleteCombat(2, 31, 40, true), "durability loss identifies the damaged hero");
+		}
+
+		private static void GhostWinUsesTheDamageEvent()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 7, 40, -5, true); tracker.RecordHeroDamage(7);
+			Equal(CombatOutcome.Win, tracker.CompleteCombat(7, 40, -5, true), "ghost win is detected without a durability change");
+		}
+
+		private static void CombatResultResetClearsActiveCombat()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, null, null, false); tracker.RecordHeroDamage(2); tracker.Reset();
+			Equal(CombatOutcome.Unknown, tracker.CompleteCombat(2, null, null, true), "reset clears pending combat result");
 		}
 
 		private static void True(bool value, string name) { if(!value) throw new InvalidOperationException(name); }

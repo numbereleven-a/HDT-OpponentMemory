@@ -17,6 +17,20 @@ namespace OpponentMemory
 		}
 
 		public int GetRound() => Core.Game?.GetTurnNumber() ?? 0;
+		public int GetLocalPlayerId()
+		{
+			var game = Core.Game;
+			if(game == null)
+				return 0;
+			var playerId = game.PlayerEntity?.GetTag(GameTag.PLAYER_ID) ?? 0;
+			return playerId > 0 ? playerId : game.Player.Id;
+		}
+
+		public int? GetHeroDurability(int playerId)
+		{
+			var hero = FindHero(playerId);
+			return hero == null ? (int?)null : hero.Health + hero.GetTag(GameTag.ARMOR);
+		}
 		public bool RequiresEightPlayerLeaderboard() => Core.Game?.CurrentGameType == GameType.GT_BATTLEGROUNDS;
 		public GameHandleSnapshot GetGameHandles()
 		{
@@ -50,9 +64,7 @@ namespace OpponentMemory
 			var game = Core.Game;
 			if(game == null)
 				return Array.Empty<LeaderboardPlayer>();
-			var localPlayerId = game.PlayerEntity?.GetTag(GameTag.PLAYER_ID) ?? 0;
-			if(localPlayerId <= 0)
-				localPlayerId = game.Player.Id;
+			var localPlayerId = GetLocalPlayerId();
 			return game.Entities.Values
 				.Where(entity => entity.IsHero)
 				.Select(entity => new { Entity = entity, PlayerId = entity.GetTag(GameTag.PLAYER_ID), Place = entity.GetTag(GameTag.PLAYER_LEADERBOARD_PLACE) })
@@ -66,7 +78,10 @@ namespace OpponentMemory
 
 		private static Entity? FindHero(int playerId)
 		{
-			return Core.Game?.Entities.Values.FirstOrDefault(entity => entity.IsHero && entity.GetTag(GameTag.PLAYER_ID) == playerId);
+			return Core.Game?.Entities.Values
+				.Where(entity => entity.IsHero && entity.GetTag(GameTag.PLAYER_ID) == playerId)
+				.OrderByDescending(entity => entity.GetTag(GameTag.PLAYER_LEADERBOARD_PLACE) > 0)
+				.FirstOrDefault();
 		}
 	}
 

@@ -21,12 +21,16 @@ namespace OpponentMemory
 		public bool ShowZeroValues { get; set; } = true;
 		public bool ShowEncounterCounts { get; set; } = true;
 		public bool HighlightLastOpponent { get; set; } = true;
+		public bool ColorLastOpponentByCombatResult { get; set; }
 		public bool CountGhostEncounters { get; set; } = true;
 		public string FontFamily { get; set; } = "Segoe UI";
 		public double FontSize { get; set; } = 22;
 		public bool BoldText { get; set; } = true;
 		public string NormalTextColor { get; set; } = "Green";
 		public string LastOpponentTextColor { get; set; } = "Red";
+		public string WinTextColor { get; set; } = "Blue";
+		public string LossTextColor { get; set; } = "Red";
+		public string DrawTextColor { get; set; } = "Yellow";
 		public string BackgroundColor { get; set; } = "Transparent";
 		public double TextOpacity { get; set; } = 100;
 		public double BackgroundOpacity { get; set; } = 0;
@@ -44,6 +48,9 @@ namespace OpponentMemory
 			if(string.IsNullOrWhiteSpace(FontFamily)) FontFamily = "Segoe UI";
 			if(string.IsNullOrWhiteSpace(NormalTextColor)) NormalTextColor = "Green";
 			if(string.IsNullOrWhiteSpace(LastOpponentTextColor)) LastOpponentTextColor = "Red";
+			if(string.IsNullOrWhiteSpace(WinTextColor)) WinTextColor = "Blue";
+			if(string.IsNullOrWhiteSpace(LossTextColor)) LossTextColor = "Red";
+			if(string.IsNullOrWhiteSpace(DrawTextColor)) DrawTextColor = "Yellow";
 			if(string.IsNullOrWhiteSpace(BackgroundColor)) BackgroundColor = "Transparent";
 		}
 
@@ -59,12 +66,16 @@ namespace OpponentMemory
 			ShowZeroValues = source.ShowZeroValues;
 			ShowEncounterCounts = source.ShowEncounterCounts;
 			HighlightLastOpponent = source.HighlightLastOpponent;
+			ColorLastOpponentByCombatResult = source.ColorLastOpponentByCombatResult;
 			CountGhostEncounters = source.CountGhostEncounters;
 			FontFamily = source.FontFamily;
 			FontSize = source.FontSize;
 			BoldText = source.BoldText;
 			NormalTextColor = source.NormalTextColor;
 			LastOpponentTextColor = source.LastOpponentTextColor;
+			WinTextColor = source.WinTextColor;
+			LossTextColor = source.LossTextColor;
+			DrawTextColor = source.DrawTextColor;
 			BackgroundColor = source.BackgroundColor;
 			TextOpacity = source.TextOpacity;
 			BackgroundOpacity = source.BackgroundOpacity;
