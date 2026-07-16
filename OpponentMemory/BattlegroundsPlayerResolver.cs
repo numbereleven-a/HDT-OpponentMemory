@@ -31,6 +31,25 @@ namespace OpponentMemory
 			var hero = FindHero(playerId);
 			return hero == null ? (int?)null : hero.Health + hero.GetTag(GameTag.ARMOR);
 		}
+
+		public bool DidPlayerWinLastCombat(int playerId)
+		{
+			var game = Core.Game;
+			if(game == null || playerId <= 0)
+				return false;
+			if(game.PlayerEntity?.GetTag(GameTag.BACON_WON_LAST_COMBAT) > 0)
+				return true;
+			return FindHero(playerId)?.GetTag(GameTag.BACON_WON_LAST_COMBAT) > 0;
+		}
+
+		public bool HasRestoredGameState() => Core.Game?.CurrentGameStats?.IsReconnect == true;
+		public long? GetClientHandle()
+		{
+			var metadataHandle = Core.Game?.MetaData.ServerInfo?.ClientHandle ?? 0;
+			var statsHandle = Core.Game?.CurrentGameStats?.ServerInfo?.ClientHandle ?? 0;
+			var handle = metadataHandle > 0 ? metadataHandle : statsHandle;
+			return handle > 0 ? handle : (long?)null;
+		}
 		public bool RequiresEightPlayerLeaderboard() => Core.Game?.CurrentGameType == GameType.GT_BATTLEGROUNDS;
 		public GameHandleSnapshot GetGameHandles()
 		{
@@ -78,10 +97,15 @@ namespace OpponentMemory
 
 		private static Entity? FindHero(int playerId)
 		{
-			return Core.Game?.Entities.Values
+			var heroes = Core.Game?.Entities.Values
 				.Where(entity => entity.IsHero && entity.GetTag(GameTag.PLAYER_ID) == playerId)
-				.OrderByDescending(entity => entity.GetTag(GameTag.PLAYER_LEADERBOARD_PLACE) > 0)
-				.FirstOrDefault();
+				.ToArray();
+			if(heroes == null)
+				return null;
+			return heroes.FirstOrDefault(entity =>
+				entity.HasTag(GameTag.PLAYER_LEADERBOARD_PLACE)
+				&& entity.GetTag(GameTag.PLAYER_LEADERBOARD_PLACE) is > 0 and <= 8)
+				?? heroes.FirstOrDefault();
 		}
 	}
 

@@ -20,6 +20,19 @@ namespace OpponentMemory
 		private int? _damagedPlayerId;
 		private bool _opponentWasGhost;
 
+		public static bool WasStateRestoredDuringCombat(
+			bool restoredAtStart,
+			bool restoredNow,
+			long? clientHandleAtStart,
+			long? currentClientHandle,
+			int gameStartGenerationAtStart = 0,
+			int currentGameStartGeneration = 0)
+		{
+			return gameStartGenerationAtStart != currentGameStartGeneration
+				|| !restoredAtStart && restoredNow
+				|| clientHandleAtStart.HasValue && currentClientHandle.HasValue && clientHandleAtStart != currentClientHandle;
+		}
+
 		public void StartCombat(int localPlayerId, int opponentPlayerId, int? localDurability, int? opponentDurability, bool opponentWasGhost)
 		{
 			if(localPlayerId <= 0 || opponentPlayerId <= 0 || localPlayerId == opponentPlayerId)
@@ -44,7 +57,13 @@ namespace OpponentMemory
 			}
 		}
 
-		public CombatOutcome CompleteCombat(int opponentPlayerId, int? localDurability, int? opponentDurability, bool assumeDrawIfNoDamage)
+		public void DiscardRecordedDamage()
+		{
+			lock(_sync)
+				_damagedPlayerId = null;
+		}
+
+		public CombatOutcome CompleteCombat(int opponentPlayerId, int? localDurability, int? opponentDurability, bool localPlayerWonLastCombat, bool assumeDrawIfNoDamage)
 		{
 			lock(_sync)
 			{
@@ -61,6 +80,8 @@ namespace OpponentMemory
 				else if(_damagedPlayerId == _localPlayerId)
 					outcome = CombatOutcome.Loss;
 				else if(_damagedPlayerId == _opponentPlayerId)
+					outcome = CombatOutcome.Win;
+				else if(localPlayerWonLastCombat)
 					outcome = CombatOutcome.Win;
 				else
 					outcome = assumeDrawIfNoDamage ? CombatOutcome.Draw : CombatOutcome.Unknown;

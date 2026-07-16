@@ -32,9 +32,20 @@ namespace OpponentMemory.Tests
 			CombatResultLossIsDetected();
 			CombatResultDrawIsDetected();
 			UncertainCombatResultRemainsUnknown();
+			RestoredWinTagIsDetected();
 			DurabilityChangeOverridesAnIncorrectEvent();
 			GhostWinUsesTheDamageEvent();
 			CombatResultResetClearsActiveCombat();
+			RestoredStateTransitionIsScopedToTheAffectedCombat();
+			GameStartGenerationDetectsAnEarlyStateRestore();
+			LateDamageIsAcceptedBeforeFinalization();
+			MenuInterruptionDoesNotEndTheCombat();
+			InterruptedCombatWaitsForSupportedState();
+			InterruptedCombatWaitsForCompletionState();
+			InterruptedLossUsesRestoredDurability();
+			RestoredDrawIgnoresReplayedDamage();
+			MissingRestoredDataDoesNotBecomeADraw();
+			InterruptedStateDoesNotLeakIntoTheNextCombat();
 			Console.WriteLine("All Opponent Memory tests passed.");
 			return 0;
 		}
@@ -192,43 +203,140 @@ namespace OpponentMemory.Tests
 		private static void CombatResultWinIsDetected()
 		{
 			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, null, null, false); tracker.RecordHeroDamage(2);
-			Equal(CombatOutcome.Win, tracker.CompleteCombat(2, null, null, true), "opponent damage means a win");
+			Equal(CombatOutcome.Win, tracker.CompleteCombat(2, null, null, false, true), "opponent damage means a win");
 		}
 
 		private static void CombatResultLossIsDetected()
 		{
 			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, null, null, false); tracker.RecordHeroDamage(1);
-			Equal(CombatOutcome.Loss, tracker.CompleteCombat(2, null, null, true), "local damage means a loss");
+			Equal(CombatOutcome.Loss, tracker.CompleteCombat(2, null, null, false, true), "local damage means a loss");
 		}
 
 		private static void CombatResultDrawIsDetected()
 		{
 			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, 40, 40, false);
-			Equal(CombatOutcome.Draw, tracker.CompleteCombat(2, 40, 40, true), "completed combat without hero damage means a draw");
+			Equal(CombatOutcome.Draw, tracker.CompleteCombat(2, 40, 40, false, true), "completed combat without hero damage means a draw");
 		}
 
 		private static void UncertainCombatResultRemainsUnknown()
 		{
 			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, null, null, false);
-			Equal(CombatOutcome.Unknown, tracker.CompleteCombat(2, null, null, false), "uncertain completion does not invent a draw");
+			Equal(CombatOutcome.Unknown, tracker.CompleteCombat(2, null, null, false, false), "uncertain completion does not invent a draw");
+		}
+
+		private static void RestoredWinTagIsDetected()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, null, null, false);
+			Equal(CombatOutcome.Win, tracker.CompleteCombat(2, null, null, true, false), "last-combat win tag restores a missed win");
 		}
 
 		private static void DurabilityChangeOverridesAnIncorrectEvent()
 		{
 			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, 40, 40, false); tracker.RecordHeroDamage(2);
-			Equal(CombatOutcome.Loss, tracker.CompleteCombat(2, 31, 40, true), "durability loss identifies the damaged hero");
+			Equal(CombatOutcome.Loss, tracker.CompleteCombat(2, 31, 40, false, true), "durability loss identifies the damaged hero");
 		}
 
 		private static void GhostWinUsesTheDamageEvent()
 		{
 			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 7, 40, -5, true); tracker.RecordHeroDamage(7);
-			Equal(CombatOutcome.Win, tracker.CompleteCombat(7, 40, -5, true), "ghost win is detected without a durability change");
+			Equal(CombatOutcome.Win, tracker.CompleteCombat(7, 40, -5, false, true), "ghost win is detected without a durability change");
 		}
 
 		private static void CombatResultResetClearsActiveCombat()
 		{
 			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, null, null, false); tracker.RecordHeroDamage(2); tracker.Reset();
-			Equal(CombatOutcome.Unknown, tracker.CompleteCombat(2, null, null, true), "reset clears pending combat result");
+			Equal(CombatOutcome.Unknown, tracker.CompleteCombat(2, null, null, false, true), "reset clears pending combat result");
+		}
+
+		private static void RestoredStateTransitionIsScopedToTheAffectedCombat()
+		{
+			True(CombatResultTracker.WasStateRestoredDuringCombat(false, true, 10, 20), "new restored state marks the interrupted combat");
+			True(CombatResultTracker.WasStateRestoredDuringCombat(true, true, 10, 20), "changed client handle marks a later interrupted combat");
+			False(CombatResultTracker.WasStateRestoredDuringCombat(true, true, 20, 20), "stable later combat can still be a draw");
+		}
+
+		private static void GameStartGenerationDetectsAnEarlyStateRestore()
+		{
+			True(CombatResultTracker.WasStateRestoredDuringCombat(false, false, 20, 20, 4, 5), "game start generation detects restoration before the delayed flag");
+			False(CombatResultTracker.WasStateRestoredDuringCombat(false, false, 20, 20, 5, 5), "stable generation does not mark a normal combat");
+		}
+
+		private static void LateDamageIsAcceptedBeforeFinalization()
+		{
+			var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+			var gate = new CombatCompletionGate();
+			var tracker = new CombatResultTracker();
+			tracker.StartCombat(1, 2, 40, 40, false);
+			gate.Begin(false);
+			False(gate.CanFinalize(now, true, true, true), "combat is not finalized immediately");
+			tracker.RecordHeroDamage(2);
+			True(gate.CanFinalize(now.AddMilliseconds(100), true, true, true), "late damage window eventually closes");
+			Equal(CombatOutcome.Win, tracker.CompleteCombat(2, 40, 40, false, true), "late damage is used before finalization");
+		}
+
+		private static void InterruptedCombatWaitsForSupportedState()
+		{
+			var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+			var gate = new CombatCompletionGate();
+			gate.Begin(true);
+			gate.Suspend();
+			False(gate.CanFinalize(now, false, false, false), "unsupported state keeps the result pending");
+			False(gate.CanFinalize(now.AddSeconds(10), true, true, true), "returning state starts a fresh stabilization window");
+			True(gate.CanFinalize(now.AddSeconds(10).AddMilliseconds(100), true, true, true), "stable returned state can finalize");
+		}
+
+		private static void MenuInterruptionDoesNotEndTheCombat()
+		{
+			var gate = new CombatCompletionGate();
+			gate.MarkInterrupted();
+			False(gate.IsPending, "temporary menu state does not end an active combat");
+			gate.Begin(false);
+			True(gate.WasInterrupted, "interruption is retained until the real combat boundary");
+		}
+
+		private static void InterruptedCombatWaitsForCompletionState()
+		{
+			var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+			var gate = new CombatCompletionGate();
+			gate.Begin(true);
+			False(gate.CanFinalize(now, true, false, true), "restored entities alone do not prove the combat ended");
+			False(gate.CanFinalize(now.AddSeconds(5), true, true, true), "confirmed completion starts the result delay");
+			True(gate.CanFinalize(now.AddSeconds(5).AddMilliseconds(100), true, true, true), "confirmed completion finalizes after the result delay");
+		}
+
+		private static void InterruptedLossUsesRestoredDurability()
+		{
+			var tracker = new CombatResultTracker();
+			tracker.StartCombat(1, 2, 40, 40, false);
+			Equal(CombatOutcome.Loss, tracker.CompleteCombat(2, 25, 40, false, false), "fifteen restored damage identifies a loss");
+		}
+
+		private static void RestoredDrawIgnoresReplayedDamage()
+		{
+			var tracker = new CombatResultTracker();
+			tracker.StartCombat(1, 2, 25, 30, false);
+			tracker.RecordHeroDamage(1);
+			tracker.DiscardRecordedDamage();
+			Equal(CombatOutcome.Draw, tracker.CompleteCombat(2, 25, 30, false, true), "replayed damage does not turn a restored draw into a loss");
+		}
+
+		private static void MissingRestoredDataDoesNotBecomeADraw()
+		{
+			var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+			var gate = new CombatCompletionGate();
+			gate.Begin(true);
+			False(gate.CanFinalize(now, true, true, false), "missing restored data starts a timeout");
+			True(gate.CanFinalize(now.AddSeconds(3), true, true, false), "missing restored data eventually releases the pending combat");
+		}
+
+		private static void InterruptedStateDoesNotLeakIntoTheNextCombat()
+		{
+			var gate = new CombatCompletionGate();
+			gate.MarkInterrupted();
+			gate.Begin(false);
+			gate.Reset();
+			gate.Begin(false);
+			False(gate.WasInterrupted, "next combat starts without the previous interruption");
 		}
 
 		private static void True(bool value, string name) { if(!value) throw new InvalidOperationException(name); }

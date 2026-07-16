@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using HearthDb.Enums;
 using Hearthstone_Deck_Tracker;
+using Hearthstone_Deck_Tracker.Enums;
 using Hearthstone_Deck_Tracker.Plugins;
 using GameEvents = Hearthstone_Deck_Tracker.API.GameEvents;
 using PredamageInfo = Hearthstone_Deck_Tracker.API.PredamageInfo;
@@ -13,9 +14,10 @@ namespace OpponentMemory
 {
 	public sealed class OpponentMemoryPlugin : IPlugin
 	{
-		public const string DisplayVersion = "1.3";
+		public const string DisplayVersion = "1.4";
 		private readonly EncounterTracker _tracker = new EncounterTracker();
 		private readonly CombatResultTracker _combatResultTracker = new CombatResultTracker();
+		private readonly CombatCompletionGate _combatCompletionGate = new CombatCompletionGate();
 		private readonly BattlegroundsPlayerResolver _resolver = new BattlegroundsPlayerResolver();
 		private readonly OpponentMemoryOverlay _overlay = new OpponentMemoryOverlay();
 		private readonly LeaderboardReadiness _leaderboardReadiness = new LeaderboardReadiness();
@@ -39,19 +41,27 @@ namespace OpponentMemory
 		private bool _overlayHiddenForBackground;
 		private CombatOutcome _lastCombatOutcome;
 		private int _eventGeneration;
+		private bool _restoredStateAtCombatStart;
+		private long? _clientHandleAtCombatStart;
+		private int _gameStartGeneration;
+		private int _gameStartGenerationAtCombatStart;
+		private int _turnStartCompletionRequested;
+		private int _playerTurnStartGeneration;
+		private int _playerTurnStartGenerationAtCombatStart;
+		private int _localPlayerIdAtCombatStart;
 
 		public string Name => "Opponent Memory";
 		public string Description => "Tracks how many times you have faced each opponent in Hearthstone Battlegrounds.";
 		public string ButtonText => "Settings";
 		public string Author => "";
-		public Version Version => new Version(1, 3);
+		public Version Version => new Version(1, 4);
 		public MenuItem MenuItem => _menuItem ??= BuildMenu();
 
 		public void OnLoad()
 		{
 			_settings = OpponentMemorySettings.Load();
 			_loaded = true;
-			RegisterCombatResultEventHandler();
+			RegisterCombatResultEventHandlers();
 			InvokeUi(_overlay.Attach);
 			PluginLogger.Info("Loaded.");
 		}
@@ -76,13 +86,12 @@ namespace OpponentMemory
 			{
 				if(!_resolver.IsSupportedSoloMatch())
 				{
+					if(_combatCompletionGate.IsPending)
+						_combatCompletionGate.Suspend();
 					if(Core.Game?.IsInMenu == true)
 					{
 						if(_tracker.ActiveCombatOpponentPlayerId is > 0)
-						{
-							CompleteActiveCombat(false);
-							_wasCombat = false;
-						}
+							_combatCompletionGate.MarkInterrupted();
 						if(_resolver.HasDefinitiveMatchResult())
 							ResetMatchState();
 						else
@@ -107,9 +116,13 @@ namespace OpponentMemory
 					if(!_wasCombat.HasValue)
 						_wasCombat = combat;
 				}
+				if(Interlocked.Exchange(ref _turnStartCompletionRequested, 0) != 0 && _tracker.ActiveCombatOpponentPlayerId is > 0)
+					BeginActiveCombatCompletion(false);
 				if(_wasCombat == true && !combat)
-					CompleteActiveCombat();
-				if(combat)
+					BeginActiveCombatCompletion(false);
+				if(_combatCompletionGate.IsPending)
+					TryFinalizeActiveCombat();
+				if(!_combatCompletionGate.IsPending && combat)
 				{
 					if(_tracker.ActiveCombatOpponentPlayerId == null)
 					{
@@ -119,16 +132,22 @@ namespace OpponentMemory
 						{
 							var localPlayerId = _resolver.GetLocalPlayerId();
 							var opponentPlayerId = _tracker.ActiveCombatOpponentPlayerId.Value;
+							_combatCompletionGate.Reset();
+							_localPlayerIdAtCombatStart = localPlayerId;
 							_combatResultTracker.StartCombat(
 								localPlayerId,
 								opponentPlayerId,
 								_resolver.GetHeroDurability(localPlayerId),
 								_resolver.GetHeroDurability(opponentPlayerId),
 								_tracker.ActiveCombatWasGhost);
+							_restoredStateAtCombatStart = _resolver.HasRestoredGameState();
+							_clientHandleAtCombatStart = _resolver.GetClientHandle();
+							_gameStartGenerationAtCombatStart = Volatile.Read(ref _gameStartGeneration);
+							_playerTurnStartGenerationAtCombatStart = Volatile.Read(ref _playerTurnStartGeneration);
 						}
 					}
 				}
-				else
+				else if(!_combatCompletionGate.IsPending)
 					_tracker.Schedule(round, scheduled, GetScheduledGhostStatus(round, scheduled, false));
 				_wasCombat = combat;
 				if(!User32.IsHearthstoneInForeground())
@@ -165,24 +184,62 @@ namespace OpponentMemory
 			}
 		}
 
-		private void CompleteActiveCombat(bool assumeDrawIfNoDamage = true)
+		private void BeginActiveCombatCompletion(bool interrupted)
+		{
+			if(_tracker.ActiveCombatOpponentPlayerId is > 0)
+				_combatCompletionGate.Begin(interrupted);
+		}
+
+		private bool TryFinalizeActiveCombat()
 		{
 			if(_tracker.ActiveCombatOpponentPlayerId is not > 0)
-				return;
-			var localPlayerId = _resolver.GetLocalPlayerId();
+			{
+				_combatCompletionGate.Reset();
+				return false;
+			}
+			var localPlayerId = _localPlayerIdAtCombatStart;
 			var opponentPlayerId = _tracker.ActiveCombatOpponentPlayerId.Value;
+			var currentClientHandle = _resolver.GetClientHandle();
+			var stateRestoredDuringCombat = CombatResultTracker.WasStateRestoredDuringCombat(
+				_restoredStateAtCombatStart,
+				_resolver.HasRestoredGameState(),
+				_clientHandleAtCombatStart,
+				currentClientHandle,
+				_gameStartGenerationAtCombatStart,
+				Volatile.Read(ref _gameStartGeneration));
+			if(stateRestoredDuringCombat)
+				_combatCompletionGate.MarkInterrupted();
+			var localDurability = _resolver.GetHeroDurability(localPlayerId);
+			var opponentDurability = _resolver.GetHeroDurability(opponentPlayerId);
+			var resultStateReady = localDurability.HasValue && (_tracker.ActiveCombatWasGhost || opponentDurability.HasValue);
+			var completionStateReady = !_combatCompletionGate.WasInterrupted
+				|| _resolver.HasRestoredGameState()
+				|| _playerTurnStartGenerationAtCombatStart != Volatile.Read(ref _playerTurnStartGeneration);
+			if(!_combatCompletionGate.CanFinalize(DateTime.UtcNow, true, completionStateReady, resultStateReady))
+				return false;
+			if(_combatCompletionGate.WasInterrupted)
+				_combatResultTracker.DiscardRecordedDamage();
 			var outcome = _combatResultTracker.CompleteCombat(
 				opponentPlayerId,
-				_resolver.GetHeroDurability(localPlayerId),
-				_resolver.GetHeroDurability(opponentPlayerId),
-				assumeDrawIfNoDamage);
+				localDurability,
+				opponentDurability,
+				_combatCompletionGate.WasInterrupted && _resolver.DidPlayerWinLastCombat(localPlayerId),
+				completionStateReady && resultStateReady);
 			var countEncounter = _settings.CountGhostEncounters || !_tracker.ActiveCombatWasGhost;
 			if(_tracker.CompleteCombat(countEncounter))
 				_lastCombatOutcome = outcome;
+			_combatResultTracker.Reset();
+			_combatCompletionGate.Reset();
 			_forceOverlayRefresh = true;
+			_restoredStateAtCombatStart = false;
+			_clientHandleAtCombatStart = null;
+			_gameStartGenerationAtCombatStart = Volatile.Read(ref _gameStartGeneration);
+			_playerTurnStartGenerationAtCombatStart = Volatile.Read(ref _playerTurnStartGeneration);
+			_localPlayerIdAtCombatStart = 0;
+			return true;
 		}
 
-		private void RegisterCombatResultEventHandler()
+		private void RegisterCombatResultEventHandlers()
 		{
 			var generation = Interlocked.Increment(ref _eventGeneration);
 			var weakPlugin = new WeakReference<OpponentMemoryPlugin>(this);
@@ -191,6 +248,31 @@ namespace OpponentMemory
 				if(weakPlugin.TryGetTarget(out var plugin))
 					plugin.HandleEntityWillTakeDamage(info, generation);
 			});
+			GameEvents.OnGameStart.Add(() =>
+			{
+				if(weakPlugin.TryGetTarget(out var plugin))
+					plugin.HandleGameStart(generation);
+			});
+			GameEvents.OnTurnStart.Add(player =>
+			{
+				if(weakPlugin.TryGetTarget(out var plugin))
+					plugin.HandleTurnStart(player, generation);
+			});
+		}
+
+		private void HandleGameStart(int generation)
+		{
+			if(_loaded && Volatile.Read(ref _eventGeneration) == generation)
+				Interlocked.Increment(ref _gameStartGeneration);
+		}
+
+		private void HandleTurnStart(ActivePlayer player, int generation)
+		{
+			if(_loaded && Volatile.Read(ref _eventGeneration) == generation && player == ActivePlayer.Player)
+			{
+				Interlocked.Increment(ref _playerTurnStartGeneration);
+				Interlocked.Exchange(ref _turnStartCompletionRequested, 1);
+			}
 		}
 
 		private void HandleEntityWillTakeDamage(PredamageInfo info, int generation)
@@ -198,7 +280,7 @@ namespace OpponentMemory
 			if(!_loaded || Volatile.Read(ref _eventGeneration) != generation || info?.Entity == null || !info.Entity.IsHero)
 				return;
 			var game = Core.Game;
-			if(game == null || !game.IsBattlegroundsSoloMatch || game.IsBattlegroundsDuosMatch || !game.IsBattlegroundsCombatPhase || game.Player.Id <= 0 || _tracker.ActiveCombatOpponentPlayerId is not > 0)
+			if(game == null || !game.IsBattlegroundsSoloMatch || game.IsBattlegroundsDuosMatch || (!game.IsBattlegroundsCombatPhase && !_combatCompletionGate.IsPending) || game.Player.Id <= 0 || _tracker.ActiveCombatOpponentPlayerId is not > 0)
 				return;
 			var localPlayerId = _resolver.GetLocalPlayerId();
 			var opponentPlayerId = _tracker.ActiveCombatOpponentPlayerId.Value;
@@ -261,7 +343,14 @@ namespace OpponentMemory
 		{
 			_tracker.Reset();
 			_combatResultTracker.Reset();
+			_combatCompletionGate.Reset();
 			_lastCombatOutcome = CombatOutcome.Unknown;
+			_restoredStateAtCombatStart = false;
+			_clientHandleAtCombatStart = null;
+			_gameStartGenerationAtCombatStart = Volatile.Read(ref _gameStartGeneration);
+			_playerTurnStartGenerationAtCombatStart = Volatile.Read(ref _playerTurnStartGeneration);
+			Interlocked.Exchange(ref _turnStartCompletionRequested, 0);
+			_localPlayerIdAtCombatStart = 0;
 			_hasMatchState = true;
 			_gameHandle = gameHandle;
 			_sawMenu = false;
@@ -277,7 +366,14 @@ namespace OpponentMemory
 		{
 			_tracker.Reset();
 			_combatResultTracker.Reset();
+			_combatCompletionGate.Reset();
 			_lastCombatOutcome = CombatOutcome.Unknown;
+			_restoredStateAtCombatStart = false;
+			_clientHandleAtCombatStart = null;
+			_gameStartGenerationAtCombatStart = Volatile.Read(ref _gameStartGeneration);
+			_playerTurnStartGenerationAtCombatStart = Volatile.Read(ref _playerTurnStartGeneration);
+			Interlocked.Exchange(ref _turnStartCompletionRequested, 0);
+			_localPlayerIdAtCombatStart = 0;
 			_wasCombat = null;
 			_wasSupported = false;
 			_hasMatchState = false;

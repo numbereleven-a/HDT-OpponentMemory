@@ -4,9 +4,9 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>OpponentMemory</AssemblyName>
     <RootNamespace>OpponentMemory</RootNamespace>
-    <Version>1.3</Version>
-    <AssemblyVersion>1.3.0.0</AssemblyVersion>
-    <FileVersion>1.3.0.0</FileVersion>
+    <Version>1.4</Version>
+    <AssemblyVersion>1.4.0.0</AssemblyVersion>
+    <FileVersion>1.4.0.0</FileVersion>
     <PlatformTarget>x64</PlatformTarget>
     <Platforms>x64</Platforms>
     <LangVersion>10</LangVersion>
