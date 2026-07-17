@@ -12,7 +12,7 @@ namespace OpponentMemory
 		private readonly OpponentMemorySettings _settings;
 		private readonly Action _apply;
 		private OpponentMemorySettings _draft;
-		private CheckBox _enabled = null!, _counts = null!, _highlight = null!, _resultColors = null!, _resultColorsInColors = null!, _zeros = null!, _ghosts = null!, _bold = null!;
+		private CheckBox _enabled = null!, _counts = null!, _damage = null!, _highlight = null!, _resultColors = null!, _resultColorsInColors = null!, _zeros = null!, _ghosts = null!, _bold = null!;
 		private ComboBox _side = null!;
 		private Slider _horizontal = null!, _perRowHorizontal = null!, _vertical = null!, _nextOffset = null!, _scale = null!, _fontSize = null!, _textOpacity = null!, _backgroundOpacity = null!;
 		private ComboBox _font = null!;
@@ -63,6 +63,8 @@ namespace OpponentMemory
 			_side = new ComboBox { ItemsSource = Enum.GetValues(typeof(CounterSide)), SelectedItem = _draft.CounterSide, Margin = new Thickness(0, 0, 0, 12) };
 			AddLabel(panel, "Counter side"); panel.Children.Add(_side);
 			_counts = AddCheck(panel, "Show encounter counts", _draft.ShowEncounterCounts);
+			_damage = AddCheck(panel, "Show last combat damage", _draft.ShowLastCombatDamage);
+			_damage.Checked += (_, __) => UpdateColorControls(); _damage.Unchecked += (_, __) => UpdateColorControls();
 			_highlight = AddCheck(panel, "Highlight last opponent", _draft.HighlightLastOpponent);
 			_resultColors = AddCheck(panel, "Color last opponent by combat result", _draft.ColorLastOpponentByCombatResult);
 			_highlight.Checked += (_, __) => UpdateColorControls(); _highlight.Unchecked += (_, __) => UpdateColorControls();
@@ -106,6 +108,7 @@ namespace OpponentMemory
 			_win = AddColorPicker(panel, "Win color", _draft.WinTextColor);
 			_loss = AddColorPicker(panel, "Loss color", _draft.LossTextColor);
 			_draw = AddColorPicker(panel, "Draw color", _draft.DrawTextColor);
+			panel.Children.Add(new TextBlock { Text = "These colors are also used for last combat damage.", Opacity = .65, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, -6, 0, 10) });
 			_colorWarning = new TextBlock { Text = "Some selected colors match. Combat results or the last opponent may be difficult to distinguish.", Foreground = Brushes.DarkOrange, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) };
 			panel.Children.Add(_colorWarning);
 			panel.Children.Add(new Separator { Margin = new Thickness(0, 14, 0, 12) });
@@ -118,7 +121,7 @@ namespace OpponentMemory
 		{
 			_draft.Enabled = _enabled.IsChecked == true;
 			_draft.CounterSide = _side.SelectedItem is CounterSide side ? side : CounterSide.Right;
-			_draft.ShowEncounterCounts = _counts.IsChecked == true; _draft.HighlightLastOpponent = _highlight.IsChecked == true;
+			_draft.ShowEncounterCounts = _counts.IsChecked == true; _draft.ShowLastCombatDamage = _damage.IsChecked == true; _draft.HighlightLastOpponent = _highlight.IsChecked == true;
 			_draft.ColorLastOpponentByCombatResult = _resultColors.IsChecked == true;
 			_draft.ShowZeroValues = _zeros.IsChecked == true; _draft.CountGhostEncounters = _ghosts.IsChecked == true;
 			_draft.HorizontalOffset = _horizontal.Value; _draft.PerRowHorizontalOffset = _perRowHorizontal.Value; _draft.VerticalOffset = _vertical.Value; _draft.NextOpponentExtraOffset = _nextOffset.Value;
@@ -129,7 +132,7 @@ namespace OpponentMemory
 
 		private void Populate()
 		{
-			_enabled.IsChecked = _draft.Enabled; _side.SelectedItem = _draft.CounterSide; _counts.IsChecked = _draft.ShowEncounterCounts; _highlight.IsChecked = _draft.HighlightLastOpponent; _resultColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _resultColorsInColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _zeros.IsChecked = _draft.ShowZeroValues; _ghosts.IsChecked = _draft.CountGhostEncounters;
+			_enabled.IsChecked = _draft.Enabled; _side.SelectedItem = _draft.CounterSide; _counts.IsChecked = _draft.ShowEncounterCounts; _damage.IsChecked = _draft.ShowLastCombatDamage; _highlight.IsChecked = _draft.HighlightLastOpponent; _resultColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _resultColorsInColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _zeros.IsChecked = _draft.ShowZeroValues; _ghosts.IsChecked = _draft.CountGhostEncounters;
 			_horizontal.Value = _draft.HorizontalOffset; _perRowHorizontal.Value = _draft.PerRowHorizontalOffset; _vertical.Value = _draft.VerticalOffset; _nextOffset.Value = _draft.NextOpponentExtraOffset; _scale.Value = _draft.Scale * 100; _fontSize.Value = _draft.FontSize; _textOpacity.Value = _draft.TextOpacity; _backgroundOpacity.Value = _draft.BackgroundOpacity;
 			_font.Text = _draft.FontFamily; _bold.IsChecked = _draft.BoldText; SelectColor(_normal, _draft.NormalTextColor); SelectColor(_last, _draft.LastOpponentTextColor); SelectColor(_win, _draft.WinTextColor); SelectColor(_loss, _draft.LossTextColor); SelectColor(_draw, _draft.DrawTextColor); SelectColor(_background, _draft.BackgroundColor); UpdateColorControls();
 		}
@@ -160,17 +163,18 @@ namespace OpponentMemory
 		private static void SelectColor(ComboBox picker, string value) { picker.SelectedItem = value; picker.Text = value; }
 		private void UpdateColorControls()
 		{
-			if(_highlight == null || _resultColors == null || _resultColorsInColors == null || _last == null || _win == null || _loss == null || _draw == null || _colorWarning == null)
+			if(_damage == null || _highlight == null || _resultColors == null || _resultColorsInColors == null || _last == null || _win == null || _loss == null || _draw == null || _colorWarning == null)
 				return;
 			var highlightEnabled = _highlight.IsChecked == true;
 			var resultColorsEnabled = highlightEnabled && _resultColors.IsChecked == true;
+			var outcomeColorsUsed = resultColorsEnabled || _damage.IsChecked == true;
 			_resultColors.IsEnabled = highlightEnabled;
 			_resultColorsInColors.IsEnabled = highlightEnabled;
 			_last.IsEnabled = highlightEnabled && !resultColorsEnabled;
-			_win.IsEnabled = resultColorsEnabled;
-			_loss.IsEnabled = resultColorsEnabled;
-			_draw.IsEnabled = resultColorsEnabled;
-			_colorWarning.Visibility = resultColorsEnabled && HasColorConflict() ? Visibility.Visible : Visibility.Collapsed;
+			_win.IsEnabled = outcomeColorsUsed;
+			_loss.IsEnabled = outcomeColorsUsed;
+			_draw.IsEnabled = outcomeColorsUsed;
+			_colorWarning.Visibility = outcomeColorsUsed && HasColorConflict() ? Visibility.Visible : Visibility.Collapsed;
 		}
 
 		private void SyncResultColorControls(CheckBox source)

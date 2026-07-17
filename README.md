@@ -20,6 +20,8 @@ The plugin is intended for the Windows version of HDT.
 
 * Counts completed combats against each opponent
 * Highlights the opponent from your most recently completed combat
+* Optionally shows the latest combat damage next to the most recent opponent
+* Uses the selected colors for wins, losses, and draws
 * Can show a compact marker instead of encounter counts
 * Places counters on either side of the leaderboard portraits
 * Supports custom positioning and per-row horizontal adjustments
@@ -51,6 +53,7 @@ Available settings include:
 
 * Counter side
 * Show or hide encounter counts
+* Show or hide last combat damage
 * Highlight the last opponent
 * Show zero values
 * Count ghost encounters

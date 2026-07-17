@@ -31,6 +31,14 @@ namespace OpponentMemory.Tests
 			CombatResultWinIsDetected();
 			CombatResultLossIsDetected();
 			CombatResultDrawIsDetected();
+			ExactWinDamageIsCaptured();
+			ExactLossDamageIsCaptured();
+			DrawDamageIsZero();
+			RestoredLossRecoversDamageFromDurability();
+			RestoredWinRecoversDamageFromDurability();
+			MissingDurabilityDoesNotInventDamage();
+			InconsistentDamageEventUsesDurability();
+			GhostExactDamageUsesTheDamageEvent();
 			UncertainCombatResultRemainsUnknown();
 			RestoredWinTagIsDetected();
 			DurabilityChangeOverridesAnIncorrectEvent();
@@ -133,7 +141,7 @@ namespace OpponentMemory.Tests
 		private static void SettingsAreClamped()
 		{
 			var settings = new OpponentMemorySettings { Scale = 9, TextOpacity = -1, FontSize = double.NaN }; settings.Normalize();
-			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); True(settings.ShowEncounterCounts, "counts visible by default"); True(settings.HighlightLastOpponent, "highlight visible by default"); False(settings.ColorLastOpponentByCombatResult, "result coloring is opt-in"); Equal("Blue", settings.WinTextColor, "default win color"); Equal("Red", settings.LossTextColor, "default loss color"); Equal("Yellow", settings.DrawTextColor, "default draw color");
+			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); True(settings.ShowEncounterCounts, "counts visible by default"); False(settings.ShowLastCombatDamage, "damage is hidden by default"); True(settings.HighlightLastOpponent, "highlight visible by default"); False(settings.ColorLastOpponentByCombatResult, "result coloring is opt-in"); Equal("Blue", settings.WinTextColor, "default win color"); Equal("Red", settings.LossTextColor, "default loss color"); Equal("Yellow", settings.DrawTextColor, "default draw color");
 		}
 
 		private static void StandardLeaderboardWaitsForEightPlayers()
@@ -216,6 +224,62 @@ namespace OpponentMemory.Tests
 		{
 			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, 40, 40, false);
 			Equal(CombatOutcome.Draw, tracker.CompleteCombat(2, 40, 40, false, true), "completed combat without hero damage means a draw");
+		}
+
+		private static void ExactWinDamageIsCaptured()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, 40, 10, false); tracker.RecordHeroDamage(2, 15);
+			var combat = tracker.CompleteCombatWithDamage(2, 40, 0, false, true);
+			Equal(CombatOutcome.Win, combat.Outcome, "opponent durability loss means a win"); Equal<int?>(15, combat.ExactDamage, "live event preserves exact overkill damage");
+		}
+
+		private static void ExactLossDamageIsCaptured()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, 40, 40, false); tracker.RecordHeroDamage(1, 10);
+			var combat = tracker.CompleteCombatWithDamage(2, 30, 40, false, true);
+			Equal(CombatOutcome.Loss, combat.Outcome, "local durability loss means a loss"); Equal<int?>(10, combat.ExactDamage, "exact loss damage");
+		}
+
+		private static void DrawDamageIsZero()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, 40, 40, false);
+			var combat = tracker.CompleteCombatWithDamage(2, 40, 40, false, true);
+			Equal(CombatOutcome.Draw, combat.Outcome, "unchanged durability means a draw"); Equal<int?>(0, combat.ExactDamage, "draw damage is zero");
+		}
+
+		private static void RestoredLossRecoversDamageFromDurability()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, 40, 40, false); tracker.RecordHeroDamage(1, 15); tracker.DiscardRecordedDamage();
+			var combat = tracker.CompleteCombatWithDamage(2, 25, 40, false, false);
+			Equal(CombatOutcome.Loss, combat.Outcome, "restored durability identifies the loss"); Equal<int?>(15, combat.ExactDamage, "loss damage is recovered from restored durability");
+		}
+
+		private static void RestoredWinRecoversDamageFromDurability()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, 40, 40, false); tracker.RecordHeroDamage(2, 15); tracker.DiscardRecordedDamage();
+			var combat = tracker.CompleteCombatWithDamage(2, 40, 25, false, false);
+			Equal(CombatOutcome.Win, combat.Outcome, "restored durability identifies the win"); Equal<int?>(15, combat.ExactDamage, "win damage is recovered from restored durability");
+		}
+
+		private static void MissingDurabilityDoesNotInventDamage()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, null, null, false);
+			var combat = tracker.CompleteCombatWithDamage(2, null, null, true, false);
+			Equal(CombatOutcome.Win, combat.Outcome, "win tag identifies the result"); Equal<int?>(null, combat.ExactDamage, "missing durability does not invent damage");
+		}
+
+		private static void InconsistentDamageEventUsesDurability()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 2, 40, 40, false); tracker.RecordHeroDamage(2, 15);
+			var combat = tracker.CompleteCombatWithDamage(2, 31, 40, false, true);
+			Equal(CombatOutcome.Loss, combat.Outcome, "durability overrides the inconsistent event"); Equal<int?>(9, combat.ExactDamage, "damage is recovered from the consistent durability side");
+		}
+
+		private static void GhostExactDamageUsesTheDamageEvent()
+		{
+			var tracker = new CombatResultTracker(); tracker.StartCombat(1, 7, 40, -5, true); tracker.RecordHeroDamage(7, 12);
+			var combat = tracker.CompleteCombatWithDamage(7, 40, -5, false, true);
+			Equal(CombatOutcome.Win, combat.Outcome, "ghost win uses the damage event"); Equal<int?>(12, combat.ExactDamage, "exact ghost damage");
 		}
 
 		private static void UncertainCombatResultRemainsUnknown()
@@ -315,9 +379,10 @@ namespace OpponentMemory.Tests
 		{
 			var tracker = new CombatResultTracker();
 			tracker.StartCombat(1, 2, 25, 30, false);
-			tracker.RecordHeroDamage(1);
+			tracker.RecordHeroDamage(1, 15);
 			tracker.DiscardRecordedDamage();
-			Equal(CombatOutcome.Draw, tracker.CompleteCombat(2, 25, 30, false, true), "replayed damage does not turn a restored draw into a loss");
+			var combat = tracker.CompleteCombatWithDamage(2, 25, 30, false, true);
+			Equal(CombatOutcome.Draw, combat.Outcome, "replayed damage does not turn a restored draw into a loss"); Equal<int?>(0, combat.ExactDamage, "restored draw displays zero");
 		}
 
 		private static void MissingRestoredDataDoesNotBecomeADraw()

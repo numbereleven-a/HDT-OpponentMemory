@@ -12,7 +12,8 @@ namespace OpponentMemory
 	public sealed class OpponentMemoryOverlay
 	{
 		private readonly Canvas _canvas = new Canvas { IsHitTestVisible = false, Visibility = Visibility.Collapsed };
-		private readonly Dictionary<int, TextBlock> _rows = new Dictionary<int, TextBlock>();
+		private readonly Dictionary<int, TextBlock> _countRows = new Dictionary<int, TextBlock>();
+		private readonly Dictionary<int, TextBlock> _damageRows = new Dictionary<int, TextBlock>();
 		private string? _styleKey;
 		private FontFamily _fontFamily = new FontFamily("Segoe UI");
 		private Brush _normalBrush = Brushes.Green;
@@ -35,14 +36,21 @@ namespace OpponentMemory
 			if(!_attached) return;
 			HdtApi.OverlayCanvas.Children.Remove(_canvas);
 			_canvas.Children.Clear();
-			_rows.Clear();
+			_countRows.Clear();
+			_damageRows.Clear();
 			_canvas.Visibility = Visibility.Collapsed;
 			_attached = false;
 		}
 
 		public void Hide() => _canvas.Visibility = Visibility.Collapsed;
 
-		public void Update(IReadOnlyList<LeaderboardPlayer> players, EncounterTracker tracker, CombatOutcome lastCombatOutcome, OpponentMemorySettings settings, int? scheduledOpponentId)
+		public void Update(
+			IReadOnlyList<LeaderboardPlayer> players,
+			EncounterTracker tracker,
+			CombatOutcome lastCombatOutcome,
+			int? lastCombatDamage,
+			OpponentMemorySettings settings,
+			int? scheduledOpponentId)
 		{
 			var overlayCanvas = HdtApi.OverlayCanvas;
 			var width = overlayCanvas.ActualWidth;
@@ -58,47 +66,76 @@ namespace OpponentMemory
 				Hide();
 				return;
 			}
+
 			UpdateStyleCache(settings);
 			var activeIds = new HashSet<int>();
+			var tileHeight = height * .69 / 8d;
+			var screenRatio = (4d / 3d) / (width / height);
+			var portraitLeft = width * screenRatio * .007 + width * (1 - screenRatio) / 2d;
 			foreach(var player in players)
 			{
 				activeIds.Add(player.PlayerId);
-				var row = GetRow(player.PlayerId);
-				var count = tracker.GetCount(player.PlayerId);
+				var rowIndex = player.LeaderboardPlace - 1;
 				var isLastOpponent = player.PlayerId == tracker.LastCompletedOpponentPlayerId;
+				var isScheduledOpponent = player.PlayerId == scheduledOpponentId;
+
+				var countRow = GetRow(_countRows, player.PlayerId);
+				var count = tracker.GetCount(player.PlayerId);
 				var showMarker = !settings.ShowEncounterCounts && settings.HighlightLastOpponent && isLastOpponent;
 				var showCount = settings.ShowEncounterCounts && (settings.ShowZeroValues || count != 0);
-				var visible = !player.IsLocalPlayer && (showCount || showMarker);
-				row.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-				if(!visible) continue;
-				row.Text = showMarker ? "●" : count.ToString();
-				row.FontFamily = _fontFamily;
-				row.FontSize = settings.FontSize * settings.Scale;
-				row.FontWeight = settings.BoldText ? FontWeights.Bold : FontWeights.Normal;
-				row.Opacity = 1;
-				row.Foreground = settings.HighlightLastOpponent && isLastOpponent ? GetLastOpponentBrush(settings, lastCombatOutcome) : _normalBrush;
-				row.Background = _backgroundBrush;
-				row.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-				var rowWidth = row.DesiredSize.Width;
-				var tileHeight = height * .69 / 8d;
-				var rowIndex = player.LeaderboardPlace - 1;
-				var top = height * .15 + tileHeight * rowIndex + (tileHeight - row.FontSize) / 2d + settings.VerticalOffset;
-				var screenRatio = (4d / 3d) / (width / height);
-				var portraitLeft = width * screenRatio * .007 + width * (1 - screenRatio) / 2d;
-				var left = settings.CounterSide == CounterSide.Left
-					? portraitLeft - settings.HorizontalOffset - rowWidth
-					: portraitLeft + tileHeight + settings.HorizontalOffset;
-				// The in-game leaderboard is rendered with a small perspective offset.
-				// Apply the same correction to both sides so the counter column remains
-				// parallel to the portraits instead of drifting to the right downwards.
-				left += rowIndex * settings.PerRowHorizontalOffset;
-				if(settings.CounterSide == CounterSide.Right && player.PlayerId == scheduledOpponentId)
-					left += settings.NextOpponentExtraOffset;
-				Canvas.SetTop(row, top);
-				Canvas.SetLeft(row, left);
+				var countVisible = !player.IsLocalPlayer && (showCount || showMarker);
+				countRow.Visibility = countVisible ? Visibility.Visible : Visibility.Collapsed;
+				if(countVisible)
+				{
+					countRow.Text = showMarker ? "●" : count.ToString();
+					ConfigureRow(countRow, settings, settings.HighlightLastOpponent && isLastOpponent ? GetLastOpponentBrush(settings, lastCombatOutcome) : _normalBrush);
+					PositionRow(countRow, settings.CounterSide, portraitLeft, tileHeight, rowIndex, isScheduledOpponent, settings);
+				}
+
+				var damageRow = GetRow(_damageRows, player.PlayerId);
+				var damageVisible = !player.IsLocalPlayer
+					&& settings.ShowLastCombatDamage
+					&& isLastOpponent
+					&& lastCombatOutcome != CombatOutcome.Unknown
+					&& lastCombatDamage.HasValue;
+				damageRow.Visibility = damageVisible ? Visibility.Visible : Visibility.Collapsed;
+				if(damageVisible)
+				{
+					damageRow.Text = lastCombatDamage.GetValueOrDefault().ToString();
+					ConfigureRow(damageRow, settings, GetCombatOutcomeBrush(lastCombatOutcome));
+					var damageSide = settings.CounterSide == CounterSide.Left ? CounterSide.Right : CounterSide.Left;
+					PositionRow(damageRow, damageSide, portraitLeft, tileHeight, rowIndex, isScheduledOpponent, settings);
+				}
 			}
-			foreach(var unused in _rows.Where(pair => !activeIds.Contains(pair.Key)).Select(pair => pair.Value)) unused.Visibility = Visibility.Collapsed;
+
+			HideUnused(_countRows, activeIds);
+			HideUnused(_damageRows, activeIds);
 			_canvas.Visibility = Visibility.Visible;
+		}
+
+		private void ConfigureRow(TextBlock row, OpponentMemorySettings settings, Brush foreground)
+		{
+			row.FontFamily = _fontFamily;
+			row.FontSize = settings.FontSize * settings.Scale;
+			row.FontWeight = settings.BoldText ? FontWeights.Bold : FontWeights.Normal;
+			row.Opacity = 1;
+			row.Foreground = foreground;
+			row.Background = _backgroundBrush;
+			row.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+		}
+
+		private static void PositionRow(TextBlock row, CounterSide side, double portraitLeft, double tileHeight, int rowIndex, bool isScheduledOpponent, OpponentMemorySettings settings)
+		{
+			var top = settings.VerticalOffset + tileHeight * rowIndex + (tileHeight - row.FontSize) / 2d;
+			top += HdtApi.OverlayCanvas.ActualHeight * .15;
+			var left = side == CounterSide.Left
+				? portraitLeft - settings.HorizontalOffset - row.DesiredSize.Width
+				: portraitLeft + tileHeight + settings.HorizontalOffset;
+			left += rowIndex * settings.PerRowHorizontalOffset;
+			if(side == CounterSide.Right && isScheduledOpponent)
+				left += settings.NextOpponentExtraOffset;
+			Canvas.SetTop(row, top);
+			Canvas.SetLeft(row, left);
 		}
 
 		private void UpdateStyleCache(OpponentMemorySettings settings)
@@ -117,9 +154,10 @@ namespace OpponentMemory
 		}
 
 		private Brush GetLastOpponentBrush(OpponentMemorySettings settings, CombatOutcome outcome)
+			=> settings.ColorLastOpponentByCombatResult ? GetCombatOutcomeBrush(outcome) : _lastBrush;
+
+		private Brush GetCombatOutcomeBrush(CombatOutcome outcome)
 		{
-			if(!settings.ColorLastOpponentByCombatResult)
-				return _lastBrush;
 			switch(outcome)
 			{
 				case CombatOutcome.Win: return _winBrush;
@@ -129,13 +167,19 @@ namespace OpponentMemory
 			}
 		}
 
-		private TextBlock GetRow(int playerId)
+		private TextBlock GetRow(IDictionary<int, TextBlock> rows, int playerId)
 		{
-			if(_rows.TryGetValue(playerId, out var row)) return row;
+			if(rows.TryGetValue(playerId, out var row)) return row;
 			row = new TextBlock { TextAlignment = TextAlignment.Center, Padding = new Thickness(3, 0, 3, 0), IsHitTestVisible = false };
-			_rows.Add(playerId, row);
+			rows.Add(playerId, row);
 			_canvas.Children.Add(row);
 			return row;
+		}
+
+		private static void HideUnused(IEnumerable<KeyValuePair<int, TextBlock>> rows, ISet<int> activeIds)
+		{
+			foreach(var unused in rows.Where(pair => !activeIds.Contains(pair.Key)).Select(pair => pair.Value))
+				unused.Visibility = Visibility.Collapsed;
 		}
 
 		private static Brush GetBrush(string value, Color fallback, double opacity)

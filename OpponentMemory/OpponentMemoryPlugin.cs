@@ -14,7 +14,7 @@ namespace OpponentMemory
 {
 	public sealed class OpponentMemoryPlugin : IPlugin
 	{
-		public const string DisplayVersion = "1.4";
+		public const string DisplayVersion = "1.5";
 		private readonly EncounterTracker _tracker = new EncounterTracker();
 		private readonly CombatResultTracker _combatResultTracker = new CombatResultTracker();
 		private readonly CombatCompletionGate _combatCompletionGate = new CombatCompletionGate();
@@ -40,6 +40,7 @@ namespace OpponentMemory
 		private bool _cachedScheduledIsGhost;
 		private bool _overlayHiddenForBackground;
 		private CombatOutcome _lastCombatOutcome;
+		private int? _lastCombatDamage;
 		private int _eventGeneration;
 		private bool _restoredStateAtCombatStart;
 		private long? _clientHandleAtCombatStart;
@@ -54,7 +55,7 @@ namespace OpponentMemory
 		public string Description => "Tracks how many times you have faced each opponent in Hearthstone Battlegrounds.";
 		public string ButtonText => "Settings";
 		public string Author => "";
-		public Version Version => new Version(1, 4);
+		public Version Version => new Version(1, 5);
 		public MenuItem MenuItem => _menuItem ??= BuildMenu();
 
 		public void OnLoad()
@@ -168,7 +169,7 @@ namespace OpponentMemory
 					_overlayRefresh.Restart();
 					var players = _resolver.GetLeaderboardPlayers();
 					if(_leaderboardReadiness.IsReady(players, _resolver.RequiresEightPlayerLeaderboard(), DateTime.UtcNow))
-						InvokeUi(() => _overlay.Update(players, _tracker, _lastCombatOutcome, _settings, scheduled));
+						InvokeUi(() => _overlay.Update(players, _tracker, _lastCombatOutcome, _lastCombatDamage, _settings, scheduled));
 					else
 						InvokeUi(_overlay.Hide);
 				}
@@ -219,7 +220,7 @@ namespace OpponentMemory
 				return false;
 			if(_combatCompletionGate.WasInterrupted)
 				_combatResultTracker.DiscardRecordedDamage();
-			var outcome = _combatResultTracker.CompleteCombat(
+			var completedCombat = _combatResultTracker.CompleteCombatWithDamage(
 				opponentPlayerId,
 				localDurability,
 				opponentDurability,
@@ -227,7 +228,10 @@ namespace OpponentMemory
 				completionStateReady && resultStateReady);
 			var countEncounter = _settings.CountGhostEncounters || !_tracker.ActiveCombatWasGhost;
 			if(_tracker.CompleteCombat(countEncounter))
-				_lastCombatOutcome = outcome;
+			{
+				_lastCombatOutcome = completedCombat.Outcome;
+				_lastCombatDamage = completedCombat.ExactDamage;
+			}
 			_combatResultTracker.Reset();
 			_combatCompletionGate.Reset();
 			_forceOverlayRefresh = true;
@@ -287,9 +291,9 @@ namespace OpponentMemory
 			var entityPlayerId = info.Entity.GetTag(GameTag.PLAYER_ID);
 			var opponentControllerId = game.Opponent.Id;
 			if(entityPlayerId == localPlayerId || info.Entity.IsControlledBy(game.Player.Id))
-				_combatResultTracker.RecordHeroDamage(localPlayerId);
+				_combatResultTracker.RecordHeroDamage(localPlayerId, info.Value);
 			else if(entityPlayerId == opponentPlayerId || opponentControllerId > 0 && (entityPlayerId == opponentControllerId || info.Entity.IsControlledBy(opponentControllerId)))
-				_combatResultTracker.RecordHeroDamage(opponentPlayerId);
+				_combatResultTracker.RecordHeroDamage(opponentPlayerId, info.Value);
 		}
 
 		private bool GetScheduledGhostStatus(int round, int? playerId, bool forceRefresh)
@@ -345,6 +349,7 @@ namespace OpponentMemory
 			_combatResultTracker.Reset();
 			_combatCompletionGate.Reset();
 			_lastCombatOutcome = CombatOutcome.Unknown;
+			_lastCombatDamage = null;
 			_restoredStateAtCombatStart = false;
 			_clientHandleAtCombatStart = null;
 			_gameStartGenerationAtCombatStart = Volatile.Read(ref _gameStartGeneration);
@@ -368,6 +373,7 @@ namespace OpponentMemory
 			_combatResultTracker.Reset();
 			_combatCompletionGate.Reset();
 			_lastCombatOutcome = CombatOutcome.Unknown;
+			_lastCombatDamage = null;
 			_restoredStateAtCombatStart = false;
 			_clientHandleAtCombatStart = null;
 			_gameStartGenerationAtCombatStart = Volatile.Read(ref _gameStartGeneration);

@@ -20,6 +20,7 @@ namespace OpponentMemory
 		public double Scale { get; set; } = 1;
 		public bool ShowZeroValues { get; set; } = true;
 		public bool ShowEncounterCounts { get; set; } = true;
+		public bool ShowLastCombatDamage { get; set; }
 		public bool HighlightLastOpponent { get; set; } = true;
 		public bool ColorLastOpponentByCombatResult { get; set; }
 		public bool CountGhostEncounters { get; set; } = true;
@@ -65,6 +66,7 @@ namespace OpponentMemory
 			Scale = source.Scale;
 			ShowZeroValues = source.ShowZeroValues;
 			ShowEncounterCounts = source.ShowEncounterCounts;
+			ShowLastCombatDamage = source.ShowLastCombatDamage;
 			HighlightLastOpponent = source.HighlightLastOpponent;
 			ColorLastOpponentByCombatResult = source.ColorLastOpponentByCombatResult;
 			CountGhostEncounters = source.CountGhostEncounters;

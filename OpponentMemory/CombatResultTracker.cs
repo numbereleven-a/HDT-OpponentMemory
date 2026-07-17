@@ -10,6 +10,18 @@ namespace OpponentMemory
 		Draw
 	}
 
+	public readonly struct CompletedCombat
+	{
+		public CompletedCombat(CombatOutcome outcome, int? exactDamage)
+		{
+			Outcome = outcome;
+			ExactDamage = exactDamage;
+		}
+
+		public CombatOutcome Outcome { get; }
+		public int? ExactDamage { get; }
+	}
+
 	public sealed class CombatResultTracker
 	{
 		private readonly object _sync = new object();
@@ -18,6 +30,7 @@ namespace OpponentMemory
 		private int? _localDurabilityAtStart;
 		private int? _opponentDurabilityAtStart;
 		private int? _damagedPlayerId;
+		private int? _recordedDamageAmount;
 		private bool _opponentWasGhost;
 
 		public static bool WasStateRestoredDuringCombat(
@@ -44,31 +57,41 @@ namespace OpponentMemory
 				_localDurabilityAtStart = localDurability;
 				_opponentDurabilityAtStart = opponentDurability;
 				_damagedPlayerId = null;
+				_recordedDamageAmount = null;
 				_opponentWasGhost = opponentWasGhost;
 			}
 		}
 
-		public void RecordHeroDamage(int damagedPlayerId)
+		public void RecordHeroDamage(int damagedPlayerId, int? exactDamage = null)
 		{
 			lock(_sync)
 			{
 				if(damagedPlayerId == _localPlayerId || damagedPlayerId == _opponentPlayerId)
+				{
 					_damagedPlayerId = damagedPlayerId;
+					_recordedDamageAmount = exactDamage is > 0 ? exactDamage : null;
+				}
 			}
 		}
 
 		public void DiscardRecordedDamage()
 		{
 			lock(_sync)
+			{
 				_damagedPlayerId = null;
+				_recordedDamageAmount = null;
+			}
 		}
 
 		public CombatOutcome CompleteCombat(int opponentPlayerId, int? localDurability, int? opponentDurability, bool localPlayerWonLastCombat, bool assumeDrawIfNoDamage)
+			=> CompleteCombatWithDamage(opponentPlayerId, localDurability, opponentDurability, localPlayerWonLastCombat, assumeDrawIfNoDamage).Outcome;
+
+		public CompletedCombat CompleteCombatWithDamage(int opponentPlayerId, int? localDurability, int? opponentDurability, bool localPlayerWonLastCombat, bool assumeDrawIfNoDamage)
 		{
 			lock(_sync)
 			{
 				if(_localPlayerId is not > 0 || _opponentPlayerId != opponentPlayerId)
-					return CombatOutcome.Unknown;
+					return new CompletedCombat(CombatOutcome.Unknown, null);
 
 				var localDamage = GetDurabilityLoss(_localDurabilityAtStart, localDurability);
 				var opponentDamage = _opponentWasGhost ? 0 : GetDurabilityLoss(_opponentDurabilityAtStart, opponentDurability);
@@ -86,8 +109,20 @@ namespace OpponentMemory
 				else
 					outcome = assumeDrawIfNoDamage ? CombatOutcome.Draw : CombatOutcome.Unknown;
 
+				int? exactDamage = null;
+				if(outcome == CombatOutcome.Draw)
+					exactDamage = 0;
+				else if(outcome == CombatOutcome.Win && _damagedPlayerId == _opponentPlayerId)
+					exactDamage = _recordedDamageAmount ?? PositiveValue(opponentDamage);
+				else if(outcome == CombatOutcome.Win)
+					exactDamage = PositiveValue(opponentDamage);
+				else if(outcome == CombatOutcome.Loss && _damagedPlayerId == _localPlayerId)
+					exactDamage = _recordedDamageAmount ?? PositiveValue(localDamage);
+				else if(outcome == CombatOutcome.Loss)
+					exactDamage = PositiveValue(localDamage);
+
 				ClearActiveCombat();
-				return outcome;
+				return new CompletedCombat(outcome, exactDamage);
 			}
 		}
 
@@ -104,6 +139,8 @@ namespace OpponentMemory
 			return Math.Max(0, before.Value - after.Value);
 		}
 
+		private static int? PositiveValue(int value) => value > 0 ? value : (int?)null;
+
 		private void ClearActiveCombat()
 		{
 			_localPlayerId = null;
@@ -111,6 +148,7 @@ namespace OpponentMemory
 			_localDurabilityAtStart = null;
 			_opponentDurabilityAtStart = null;
 			_damagedPlayerId = null;
+			_recordedDamageAmount = null;
 			_opponentWasGhost = false;
 		}
 	}
