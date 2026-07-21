@@ -52,9 +52,11 @@ namespace OpponentMemory
 		private int _localPlayerIdAtCombatStart;
 
 		public string Name => "Opponent Memory";
-		public string Description => "Tracks how many times you have faced each opponent in Hearthstone Battlegrounds.";
+		public string Description =>
+			"Tracks how many times you have faced each opponent in Hearthstone Battlegrounds.\n\n" +
+			"GitHub: https://github.com/numbereleven-a/HDT-OpponentMemory";
 		public string ButtonText => "Settings";
-		public string Author => "";
+		public string Author => "numbereleven-a";
 		public Version Version => new Version(1, 5);
 		public MenuItem MenuItem => _menuItem ??= BuildMenu();
 
