@@ -6,6 +6,7 @@ using Hearthstone_Deck_Tracker;
 namespace OpponentMemory
 {
 	public enum CounterSide { Left, Right }
+	public enum OverlayTextStyle { Classic, Outlined, Badge }
 
 	public sealed class OpponentMemorySettings
 	{
@@ -18,6 +19,7 @@ namespace OpponentMemory
 		public double VerticalOffset { get; set; }
 		public double NextOpponentExtraOffset { get; set; } = 32;
 		public double Scale { get; set; } = 1;
+		public OverlayTextStyle TextStyle { get; set; } = OverlayTextStyle.Outlined;
 		public bool ShowZeroValues { get; set; } = true;
 		public bool ShowEncounterCounts { get; set; } = true;
 		public bool ShowLastCombatDamage { get; set; }
@@ -43,6 +45,7 @@ namespace OpponentMemory
 			VerticalOffset = Clamp(VerticalOffset, -200, 200, 0);
 			NextOpponentExtraOffset = Clamp(NextOpponentExtraOffset, -200, 300, 32);
 			Scale = Clamp(Scale, .5, 2, 1);
+			if(!Enum.IsDefined(typeof(OverlayTextStyle), TextStyle)) TextStyle = OverlayTextStyle.Outlined;
 			FontSize = Clamp(FontSize, 8, 72, 22);
 			TextOpacity = Clamp(TextOpacity, 0, 100, 100);
 			BackgroundOpacity = Clamp(BackgroundOpacity, 0, 100, 0);
@@ -64,6 +67,7 @@ namespace OpponentMemory
 			VerticalOffset = source.VerticalOffset;
 			NextOpponentExtraOffset = source.NextOpponentExtraOffset;
 			Scale = source.Scale;
+			TextStyle = source.TextStyle;
 			ShowZeroValues = source.ShowZeroValues;
 			ShowEncounterCounts = source.ShowEncounterCounts;
 			ShowLastCombatDamage = source.ShowLastCombatDamage;

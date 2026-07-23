@@ -140,8 +140,8 @@ namespace OpponentMemory.Tests
 
 		private static void SettingsAreClamped()
 		{
-			var settings = new OpponentMemorySettings { Scale = 9, TextOpacity = -1, FontSize = double.NaN }; settings.Normalize();
-			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); True(settings.ShowEncounterCounts, "counts visible by default"); False(settings.ShowLastCombatDamage, "damage is hidden by default"); True(settings.HighlightLastOpponent, "highlight visible by default"); False(settings.ColorLastOpponentByCombatResult, "result coloring is opt-in"); Equal("Blue", settings.WinTextColor, "default win color"); Equal("Red", settings.LossTextColor, "default loss color"); Equal("Yellow", settings.DrawTextColor, "default draw color");
+			var settings = new OpponentMemorySettings { Scale = 9, TextOpacity = -1, FontSize = double.NaN, TextStyle = (OverlayTextStyle)99 }; settings.Normalize();
+			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); Equal(OverlayTextStyle.Outlined, settings.TextStyle, "outlined text is the default fallback"); True(settings.ShowEncounterCounts, "counts visible by default"); False(settings.ShowLastCombatDamage, "damage is hidden by default"); True(settings.HighlightLastOpponent, "highlight visible by default"); False(settings.ColorLastOpponentByCombatResult, "result coloring is opt-in"); Equal("Blue", settings.WinTextColor, "default win color"); Equal("Red", settings.LossTextColor, "default loss color"); Equal("Yellow", settings.DrawTextColor, "default draw color");
 		}
 
 		private static void StandardLeaderboardWaitsForEightPlayers()

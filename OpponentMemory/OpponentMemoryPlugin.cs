@@ -14,7 +14,7 @@ namespace OpponentMemory
 {
 	public sealed class OpponentMemoryPlugin : IPlugin
 	{
-		public const string DisplayVersion = "1.5";
+		public const string DisplayVersion = "1.6";
 		private readonly EncounterTracker _tracker = new EncounterTracker();
 		private readonly CombatResultTracker _combatResultTracker = new CombatResultTracker();
 		private readonly CombatCompletionGate _combatCompletionGate = new CombatCompletionGate();
@@ -57,7 +57,7 @@ namespace OpponentMemory
 			"GitHub: https://github.com/numbereleven-a/HDT-OpponentMemory";
 		public string ButtonText => "Settings";
 		public string Author => "numbereleven-a";
-		public Version Version => new Version(1, 5);
+		public Version Version => new Version(1, 6);
 		public MenuItem MenuItem => _menuItem ??= BuildMenu();
 
 		public void OnLoad()

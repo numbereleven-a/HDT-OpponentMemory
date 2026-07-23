@@ -12,8 +12,8 @@ namespace OpponentMemory
 	public sealed class OpponentMemoryOverlay
 	{
 		private readonly Canvas _canvas = new Canvas { IsHitTestVisible = false, Visibility = Visibility.Collapsed };
-		private readonly Dictionary<int, TextBlock> _countRows = new Dictionary<int, TextBlock>();
-		private readonly Dictionary<int, TextBlock> _damageRows = new Dictionary<int, TextBlock>();
+		private readonly Dictionary<int, OverlayLabel> _countRows = new Dictionary<int, OverlayLabel>();
+		private readonly Dictionary<int, OverlayLabel> _damageRows = new Dictionary<int, OverlayLabel>();
 		private string? _styleKey;
 		private FontFamily _fontFamily = new FontFamily("Segoe UI");
 		private Brush _normalBrush = Brushes.Green;
@@ -87,8 +87,7 @@ namespace OpponentMemory
 				countRow.Visibility = countVisible ? Visibility.Visible : Visibility.Collapsed;
 				if(countVisible)
 				{
-					countRow.Text = showMarker ? "●" : count.ToString();
-					ConfigureRow(countRow, settings, settings.HighlightLastOpponent && isLastOpponent ? GetLastOpponentBrush(settings, lastCombatOutcome) : _normalBrush);
+					ConfigureRow(countRow, showMarker ? "●" : count.ToString(), settings, settings.HighlightLastOpponent && isLastOpponent ? GetLastOpponentBrush(settings, lastCombatOutcome) : _normalBrush);
 					PositionRow(countRow, settings.CounterSide, portraitLeft, tileHeight, rowIndex, isScheduledOpponent, settings);
 				}
 
@@ -101,8 +100,7 @@ namespace OpponentMemory
 				damageRow.Visibility = damageVisible ? Visibility.Visible : Visibility.Collapsed;
 				if(damageVisible)
 				{
-					damageRow.Text = lastCombatDamage.GetValueOrDefault().ToString();
-					ConfigureRow(damageRow, settings, GetCombatOutcomeBrush(lastCombatOutcome));
+					ConfigureRow(damageRow, lastCombatDamage.GetValueOrDefault().ToString(), settings, GetCombatOutcomeBrush(lastCombatOutcome));
 					var damageSide = settings.CounterSide == CounterSide.Left ? CounterSide.Right : CounterSide.Left;
 					PositionRow(damageRow, damageSide, portraitLeft, tileHeight, rowIndex, isScheduledOpponent, settings);
 				}
@@ -113,18 +111,20 @@ namespace OpponentMemory
 			_canvas.Visibility = Visibility.Visible;
 		}
 
-		private void ConfigureRow(TextBlock row, OpponentMemorySettings settings, Brush foreground)
+		private void ConfigureRow(OverlayLabel row, string text, OpponentMemorySettings settings, Brush foreground)
 		{
-			row.FontFamily = _fontFamily;
-			row.FontSize = settings.FontSize * settings.Scale;
-			row.FontWeight = settings.BoldText ? FontWeights.Bold : FontWeights.Normal;
-			row.Opacity = 1;
-			row.Foreground = foreground;
-			row.Background = _backgroundBrush;
+			row.Configure(
+				text,
+				_fontFamily,
+				settings.FontSize * settings.Scale,
+				settings.BoldText ? FontWeights.Bold : FontWeights.Normal,
+				foreground,
+				_backgroundBrush,
+				settings.TextStyle);
 			row.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
 		}
 
-		private static void PositionRow(TextBlock row, CounterSide side, double portraitLeft, double tileHeight, int rowIndex, bool isScheduledOpponent, OpponentMemorySettings settings)
+		private static void PositionRow(OverlayLabel row, CounterSide side, double portraitLeft, double tileHeight, int rowIndex, bool isScheduledOpponent, OpponentMemorySettings settings)
 		{
 			var top = settings.VerticalOffset + tileHeight * rowIndex + (tileHeight - row.FontSize) / 2d;
 			top += HdtApi.OverlayCanvas.ActualHeight * .15;
@@ -167,16 +167,16 @@ namespace OpponentMemory
 			}
 		}
 
-		private TextBlock GetRow(IDictionary<int, TextBlock> rows, int playerId)
+		private OverlayLabel GetRow(IDictionary<int, OverlayLabel> rows, int playerId)
 		{
 			if(rows.TryGetValue(playerId, out var row)) return row;
-			row = new TextBlock { TextAlignment = TextAlignment.Center, Padding = new Thickness(3, 0, 3, 0), IsHitTestVisible = false };
+			row = new OverlayLabel();
 			rows.Add(playerId, row);
 			_canvas.Children.Add(row);
 			return row;
 		}
 
-		private static void HideUnused(IEnumerable<KeyValuePair<int, TextBlock>> rows, ISet<int> activeIds)
+		private static void HideUnused(IEnumerable<KeyValuePair<int, OverlayLabel>> rows, ISet<int> activeIds)
 		{
 			foreach(var unused in rows.Where(pair => !activeIds.Contains(pair.Key)).Select(pair => pair.Value))
 				unused.Visibility = Visibility.Collapsed;

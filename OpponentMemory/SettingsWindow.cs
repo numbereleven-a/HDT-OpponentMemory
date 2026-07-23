@@ -13,7 +13,7 @@ namespace OpponentMemory
 		private readonly Action _apply;
 		private OpponentMemorySettings _draft;
 		private CheckBox _enabled = null!, _counts = null!, _damage = null!, _highlight = null!, _resultColors = null!, _resultColorsInColors = null!, _zeros = null!, _ghosts = null!, _bold = null!;
-		private ComboBox _side = null!;
+		private ComboBox _side = null!, _textStyle = null!;
 		private Slider _horizontal = null!, _perRowHorizontal = null!, _vertical = null!, _nextOffset = null!, _scale = null!, _fontSize = null!, _textOpacity = null!, _backgroundOpacity = null!;
 		private ComboBox _font = null!;
 		private ComboBox _normal = null!, _last = null!, _win = null!, _loss = null!, _draw = null!, _background = null!;
@@ -81,6 +81,9 @@ namespace OpponentMemory
 		private UIElement BuildVisualTab()
 		{
 			var panel = NewPanel();
+			AddLabel(panel, "Text style");
+			_textStyle = new ComboBox { ItemsSource = TextStyleOptions, SelectedItem = TextStyleName(_draft.TextStyle), Margin = new Thickness(0, 0, 0, 12) };
+			panel.Children.Add(_textStyle);
 			_horizontal = AddSlider(panel, "Horizontal offset", -80, 160, 1, _draft.HorizontalOffset);
 			_perRowHorizontal = AddSlider(panel, "Per-row horizontal adjustment", -15, 15, .25, _draft.PerRowHorizontalOffset);
 			_vertical = AddSlider(panel, "Vertical adjustment", -80, 80, 1, _draft.VerticalOffset);
@@ -125,7 +128,7 @@ namespace OpponentMemory
 			_draft.ColorLastOpponentByCombatResult = _resultColors.IsChecked == true;
 			_draft.ShowZeroValues = _zeros.IsChecked == true; _draft.CountGhostEncounters = _ghosts.IsChecked == true;
 			_draft.HorizontalOffset = _horizontal.Value; _draft.PerRowHorizontalOffset = _perRowHorizontal.Value; _draft.VerticalOffset = _vertical.Value; _draft.NextOpponentExtraOffset = _nextOffset.Value;
-			_draft.Scale = _scale.Value / 100d; _draft.FontSize = _fontSize.Value; _draft.TextOpacity = _textOpacity.Value; _draft.BackgroundOpacity = _backgroundOpacity.Value;
+			_draft.Scale = _scale.Value / 100d; _draft.TextStyle = SelectedTextStyle(_textStyle); _draft.FontSize = _fontSize.Value; _draft.TextOpacity = _textOpacity.Value; _draft.BackgroundOpacity = _backgroundOpacity.Value;
 			_draft.FontFamily = _font.Text; _draft.BoldText = _bold.IsChecked == true; _draft.NormalTextColor = ColorValue(_normal); _draft.LastOpponentTextColor = ColorValue(_last); _draft.WinTextColor = ColorValue(_win); _draft.LossTextColor = ColorValue(_loss); _draft.DrawTextColor = ColorValue(_draw); _draft.BackgroundColor = ColorValue(_background);
 			_draft.Normalize(); _settings.CopyFrom(_draft); _settings.Save(); _apply();
 		}
@@ -133,7 +136,7 @@ namespace OpponentMemory
 		private void Populate()
 		{
 			_enabled.IsChecked = _draft.Enabled; _side.SelectedItem = _draft.CounterSide; _counts.IsChecked = _draft.ShowEncounterCounts; _damage.IsChecked = _draft.ShowLastCombatDamage; _highlight.IsChecked = _draft.HighlightLastOpponent; _resultColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _resultColorsInColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _zeros.IsChecked = _draft.ShowZeroValues; _ghosts.IsChecked = _draft.CountGhostEncounters;
-			_horizontal.Value = _draft.HorizontalOffset; _perRowHorizontal.Value = _draft.PerRowHorizontalOffset; _vertical.Value = _draft.VerticalOffset; _nextOffset.Value = _draft.NextOpponentExtraOffset; _scale.Value = _draft.Scale * 100; _fontSize.Value = _draft.FontSize; _textOpacity.Value = _draft.TextOpacity; _backgroundOpacity.Value = _draft.BackgroundOpacity;
+			_textStyle.SelectedItem = TextStyleName(_draft.TextStyle); _horizontal.Value = _draft.HorizontalOffset; _perRowHorizontal.Value = _draft.PerRowHorizontalOffset; _vertical.Value = _draft.VerticalOffset; _nextOffset.Value = _draft.NextOpponentExtraOffset; _scale.Value = _draft.Scale * 100; _fontSize.Value = _draft.FontSize; _textOpacity.Value = _draft.TextOpacity; _backgroundOpacity.Value = _draft.BackgroundOpacity;
 			_font.Text = _draft.FontFamily; _bold.IsChecked = _draft.BoldText; SelectColor(_normal, _draft.NormalTextColor); SelectColor(_last, _draft.LastOpponentTextColor); SelectColor(_win, _draft.WinTextColor); SelectColor(_loss, _draft.LossTextColor); SelectColor(_draw, _draft.DrawTextColor); SelectColor(_background, _draft.BackgroundColor); UpdateColorControls();
 		}
 
@@ -150,6 +153,17 @@ namespace OpponentMemory
 			panel.Children.Add(picker); return picker;
 		}
 		private static readonly string[] PopularFonts = { "Segoe UI", "Arial", "Calibri", "Tahoma", "Verdana", "Trebuchet MS", "Georgia", "Times New Roman", "Consolas", "Courier New" };
+		private static readonly string[] TextStyleOptions = { "Light", "Outlined", "Badge" };
+		private static string TextStyleName(OverlayTextStyle style) => style == OverlayTextStyle.Classic ? "Light" : style.ToString();
+		private static OverlayTextStyle SelectedTextStyle(ComboBox picker)
+		{
+			switch(picker.SelectedItem as string)
+			{
+				case "Light": return OverlayTextStyle.Classic;
+				case "Badge": return OverlayTextStyle.Badge;
+				default: return OverlayTextStyle.Outlined;
+			}
+		}
 		private ComboBox AddColorPicker(Panel panel, string label, string value)
 		{
 			AddLabel(panel, label);
