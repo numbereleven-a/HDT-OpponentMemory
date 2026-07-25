@@ -7,14 +7,12 @@ using HearthDb.Enums;
 using Hearthstone_Deck_Tracker;
 using Hearthstone_Deck_Tracker.Enums;
 using Hearthstone_Deck_Tracker.Plugins;
-using GameEvents = Hearthstone_Deck_Tracker.API.GameEvents;
 using PredamageInfo = Hearthstone_Deck_Tracker.API.PredamageInfo;
 
 namespace OpponentMemory
 {
 	public sealed class OpponentMemoryPlugin : IPlugin
 	{
-		public const string DisplayVersion = "1.6";
 		private readonly EncounterTracker _tracker = new EncounterTracker();
 		private readonly CombatResultTracker _combatResultTracker = new CombatResultTracker();
 		private readonly CombatCompletionGate _combatCompletionGate = new CombatCompletionGate();
@@ -25,7 +23,7 @@ namespace OpponentMemory
 		private SettingsWindow? _settingsWindow;
 		private MenuItem? _menuItem;
 		private MenuItem? _enabledMenuItem;
-		private bool _loaded;
+		private volatile bool _loaded;
 		private bool _wasSupported;
 		private bool? _wasCombat;
 		private bool _hasMatchState;
@@ -41,7 +39,6 @@ namespace OpponentMemory
 		private bool _overlayHiddenForBackground;
 		private CombatOutcome _lastCombatOutcome;
 		private int? _lastCombatDamage;
-		private int _eventGeneration;
 		private bool _restoredStateAtCombatStart;
 		private long? _clientHandleAtCombatStart;
 		private int _gameStartGeneration;
@@ -57,22 +54,26 @@ namespace OpponentMemory
 			"GitHub: https://github.com/numbereleven-a/HDT-OpponentMemory";
 		public string ButtonText => "Settings";
 		public string Author => "numbereleven-a";
-		public Version Version => new Version(1, 6);
+		public Version Version => new Version(1, 7);
 		public MenuItem MenuItem => _menuItem ??= BuildMenu();
 
 		public void OnLoad()
 		{
 			_settings = OpponentMemorySettings.Load();
 			_loaded = true;
-			RegisterCombatResultEventHandlers();
-			InvokeUi(_overlay.Attach);
+			GameEventBridge.Activate(this);
+			InvokeUi(() =>
+			{
+				_overlay.Attach();
+				SyncMenuState();
+			});
 			PluginLogger.Info("Loaded.");
 		}
 
 		public void OnUnload()
 		{
 			_loaded = false;
-			Interlocked.Increment(ref _eventGeneration);
+			GameEventBridge.Deactivate(this);
 			ResetMatchState();
 			InvokeUi(() => { _settingsWindow?.Close(); _settingsWindow = null; _overlay.Detach(); });
 			_settings.Save();
@@ -87,6 +88,7 @@ namespace OpponentMemory
 				return;
 			try
 			{
+				_resolver.BeginTick();
 				if(!_resolver.IsSupportedSoloMatch())
 				{
 					if(_combatCompletionGate.IsPending)
@@ -153,7 +155,7 @@ namespace OpponentMemory
 				else if(!_combatCompletionGate.IsPending)
 					_tracker.Schedule(round, scheduled, GetScheduledGhostStatus(round, scheduled, false));
 				_wasCombat = combat;
-				if(!User32.IsHearthstoneInForeground())
+				if(_settings.HideOverlayWhenHearthstoneIsNotFocused && !User32.IsHearthstoneInForeground())
 				{
 					if(!_overlayHiddenForBackground)
 						InvokeUi(_overlay.Hide);
@@ -245,51 +247,33 @@ namespace OpponentMemory
 			return true;
 		}
 
-		private void RegisterCombatResultEventHandlers()
+		internal void HandleGameStart()
 		{
-			var generation = Interlocked.Increment(ref _eventGeneration);
-			var weakPlugin = new WeakReference<OpponentMemoryPlugin>(this);
-			GameEvents.OnEntityWillTakeDamage.Add(info =>
-			{
-				if(weakPlugin.TryGetTarget(out var plugin))
-					plugin.HandleEntityWillTakeDamage(info, generation);
-			});
-			GameEvents.OnGameStart.Add(() =>
-			{
-				if(weakPlugin.TryGetTarget(out var plugin))
-					plugin.HandleGameStart(generation);
-			});
-			GameEvents.OnTurnStart.Add(player =>
-			{
-				if(weakPlugin.TryGetTarget(out var plugin))
-					plugin.HandleTurnStart(player, generation);
-			});
-		}
-
-		private void HandleGameStart(int generation)
-		{
-			if(_loaded && Volatile.Read(ref _eventGeneration) == generation)
+			if(_loaded)
 				Interlocked.Increment(ref _gameStartGeneration);
 		}
 
-		private void HandleTurnStart(ActivePlayer player, int generation)
+		internal void HandleTurnStart(ActivePlayer player)
 		{
-			if(_loaded && Volatile.Read(ref _eventGeneration) == generation && player == ActivePlayer.Player)
+			if(_loaded && player == ActivePlayer.Player)
 			{
 				Interlocked.Increment(ref _playerTurnStartGeneration);
 				Interlocked.Exchange(ref _turnStartCompletionRequested, 1);
 			}
 		}
 
-		private void HandleEntityWillTakeDamage(PredamageInfo info, int generation)
+		internal void HandleEntityWillTakeDamage(PredamageInfo info)
 		{
-			if(!_loaded || Volatile.Read(ref _eventGeneration) != generation || info?.Entity == null || !info.Entity.IsHero)
+			if(!_loaded || info?.Entity == null || !info.Entity.IsHero)
+				return;
+			var activeOpponent = _tracker.ActiveCombatOpponentPlayerId;
+			if(activeOpponent is not > 0)
 				return;
 			var game = Core.Game;
-			if(game == null || !game.IsBattlegroundsSoloMatch || game.IsBattlegroundsDuosMatch || (!game.IsBattlegroundsCombatPhase && !_combatCompletionGate.IsPending) || game.Player.Id <= 0 || _tracker.ActiveCombatOpponentPlayerId is not > 0)
+			if(game == null || !game.IsBattlegroundsSoloMatch || game.IsBattlegroundsDuosMatch || (!game.IsBattlegroundsCombatPhase && !_combatCompletionGate.IsPending) || game.Player.Id <= 0)
 				return;
 			var localPlayerId = _resolver.GetLocalPlayerId();
-			var opponentPlayerId = _tracker.ActiveCombatOpponentPlayerId.Value;
+			var opponentPlayerId = activeOpponent.Value;
 			var entityPlayerId = info.Entity.GetTag(GameTag.PLAYER_ID);
 			var opponentControllerId = game.Opponent.Id;
 			if(entityPlayerId == localPlayerId || info.Entity.IsControlledBy(game.Player.Id))
@@ -405,7 +389,12 @@ namespace OpponentMemory
 		private void ShowSettings() => InvokeUi(() =>
 		{
 			if(_settingsWindow != null) { _settingsWindow.Activate(); return; }
-			_settingsWindow = new SettingsWindow(_settings, ApplySettings);
+			_settingsWindow = new SettingsWindow(_settings, ApplySettings, Version);
+			var owner = Application.Current?.MainWindow;
+			if(owner != null && !ReferenceEquals(owner, _settingsWindow))
+				_settingsWindow.Owner = owner;
+			else
+				_settingsWindow.WindowStartupLocation = WindowStartupLocation.CenterScreen;
 			_settingsWindow.Closed += (_, __) => _settingsWindow = null;
 			_settingsWindow.Show();
 		});

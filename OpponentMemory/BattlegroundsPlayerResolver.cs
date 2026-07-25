@@ -10,6 +10,10 @@ namespace OpponentMemory
 {
 	public sealed class BattlegroundsPlayerResolver
 	{
+		private Entity[]? _entityCache;
+
+		public void BeginTick() => _entityCache = null;
+
 		public bool IsSupportedSoloMatch()
 		{
 			var game = Core.Game;
@@ -84,7 +88,7 @@ namespace OpponentMemory
 			if(game == null)
 				return Array.Empty<LeaderboardPlayer>();
 			var localPlayerId = GetLocalPlayerId();
-			return game.Entities.Values
+			return Entities
 				.Where(entity => entity.IsHero)
 				.Select(entity => new { Entity = entity, PlayerId = entity.GetTag(GameTag.PLAYER_ID), Place = entity.GetTag(GameTag.PLAYER_LEADERBOARD_PLACE) })
 				.Where(x => x.PlayerId > 0 && x.Place > 0 && x.Place <= 8)
@@ -95,17 +99,35 @@ namespace OpponentMemory
 				.ToArray();
 		}
 
-		private static Entity? FindHero(int playerId)
+		private Entity? FindHero(int playerId)
 		{
-			var heroes = Core.Game?.Entities.Values
+			var heroes = Entities
 				.Where(entity => entity.IsHero && entity.GetTag(GameTag.PLAYER_ID) == playerId)
 				.ToArray();
-			if(heroes == null)
-				return null;
 			return heroes.FirstOrDefault(entity =>
 				entity.HasTag(GameTag.PLAYER_LEADERBOARD_PLACE)
 				&& entity.GetTag(GameTag.PLAYER_LEADERBOARD_PLACE) is > 0 and <= 8)
 				?? heroes.FirstOrDefault();
+		}
+
+		private Entity[] Entities => _entityCache ??= SnapshotEntities();
+
+		private static Entity[] SnapshotEntities()
+		{
+			var game = Core.Game;
+			if(game == null)
+				return Array.Empty<Entity>();
+			for(var attempt = 0; attempt < 3; attempt++)
+			{
+				try
+				{
+					return game.Entities.Values.ToArray();
+				}
+				catch(InvalidOperationException)
+				{
+				}
+			}
+			return Array.Empty<Entity>();
 		}
 	}
 

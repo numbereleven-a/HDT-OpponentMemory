@@ -1,8 +1,12 @@
 using System;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 
 namespace OpponentMemory
@@ -11,18 +15,24 @@ namespace OpponentMemory
 	{
 		private readonly OpponentMemorySettings _settings;
 		private readonly Action _apply;
+		private readonly Version _installedVersion;
 		private OpponentMemorySettings _draft;
-		private CheckBox _enabled = null!, _counts = null!, _damage = null!, _highlight = null!, _resultColors = null!, _resultColorsInColors = null!, _zeros = null!, _ghosts = null!, _bold = null!;
+		private CheckBox _enabled = null!, _counts = null!, _damage = null!, _highlight = null!, _resultColors = null!, _resultColorsInColors = null!, _zeros = null!, _ghosts = null!, _hideWhenUnfocused = null!, _bold = null!;
 		private ComboBox _side = null!, _textStyle = null!;
 		private Slider _horizontal = null!, _perRowHorizontal = null!, _vertical = null!, _nextOffset = null!, _scale = null!, _fontSize = null!, _textOpacity = null!, _backgroundOpacity = null!;
 		private ComboBox _font = null!;
 		private ComboBox _normal = null!, _last = null!, _win = null!, _loss = null!, _draw = null!, _background = null!;
 		private TextBlock _colorWarning = null!;
+		private Button _updateButton = null!;
+		private TextBlock _versionText = null!;
+		private CancellationTokenSource? _updateCancellation;
+		private bool _windowClosed;
 
-		public SettingsWindow(OpponentMemorySettings settings, Action apply)
+		public SettingsWindow(OpponentMemorySettings settings, Action apply, Version installedVersion)
 		{
 			_settings = settings;
 			_apply = apply;
+			_installedVersion = installedVersion;
 			_draft = Clone(settings);
 			Title = "Opponent Memory settings";
 			Width = 440;
@@ -31,6 +41,11 @@ namespace OpponentMemory
 			MinHeight = 610;
 			WindowStartupLocation = WindowStartupLocation.CenterOwner;
 			Content = BuildContent();
+			Closed += (_, __) =>
+			{
+				_windowClosed = true;
+				_updateCancellation?.Cancel();
+			};
 		}
 
 		private UIElement BuildContent()
@@ -45,15 +60,128 @@ namespace OpponentMemory
 			UpdateColorControls();
 			Grid.SetRow(tabs, 0); root.Children.Add(tabs);
 			var bottom = new DockPanel { Margin = new Thickness(0, 12, 0, 0) };
-			bottom.Children.Add(new TextBlock { Text = "Version " + OpponentMemoryPlugin.DisplayVersion, VerticalAlignment = VerticalAlignment.Center, Opacity = .65 });
 			var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
 			var apply = new Button { Content = "Apply", MinWidth = 78, Margin = new Thickness(4, 0, 0, 0) }; apply.Click += (_, __) => ApplyDraft();
 			var ok = new Button { Content = "OK", MinWidth = 78, Margin = new Thickness(4, 0, 0, 0) }; ok.Click += (_, __) => { ApplyDraft(); Close(); };
 			var cancel = new Button { Content = "Cancel", MinWidth = 78, Margin = new Thickness(4, 0, 0, 0) }; cancel.Click += (_, __) => Close();
 			buttons.Children.Add(apply); buttons.Children.Add(ok); buttons.Children.Add(cancel);
 			DockPanel.SetDock(buttons, Dock.Right); bottom.Children.Add(buttons);
+			var versionPanel = new StackPanel { Orientation = Orientation.Horizontal, Height = 22, Width = 166, VerticalAlignment = VerticalAlignment.Center };
+			var updateIcon = new TextBlock
+			{
+				Text = "↻",
+				FontFamily = new FontFamily("Segoe UI Symbol"),
+				FontSize = 14,
+				LineHeight = 16,
+				LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+				HorizontalAlignment = HorizontalAlignment.Center,
+				VerticalAlignment = VerticalAlignment.Center,
+				Margin = new Thickness(0, -2, 0, 0)
+			};
+			_updateButton = new Button
+			{
+				Content = updateIcon,
+				Width = 22,
+				Height = 20,
+				Padding = new Thickness(0),
+				HorizontalContentAlignment = HorizontalAlignment.Center,
+				VerticalContentAlignment = VerticalAlignment.Center,
+				VerticalAlignment = VerticalAlignment.Center,
+				ToolTip = "Check for updates",
+				Margin = new Thickness(0, 0, 4, 0)
+			};
+			_updateButton.Click += CheckForUpdates;
+			_versionText = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Opacity = .65 };
+			SetVersionText();
+			var versionView = new Viewbox { Width = 140, Height = 20, Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly, HorizontalAlignment = HorizontalAlignment.Left, Child = _versionText };
+			versionPanel.Children.Add(_updateButton);
+			versionPanel.Children.Add(versionView);
+			DockPanel.SetDock(versionPanel, Dock.Left); bottom.Children.Add(versionPanel);
 			Grid.SetRow(bottom, 1); root.Children.Add(bottom);
 			return root;
+		}
+
+		private async void CheckForUpdates(object sender, RoutedEventArgs args)
+		{
+			if(_updateCancellation != null)
+				return;
+			var cancellation = new CancellationTokenSource();
+			_updateCancellation = cancellation;
+			_updateButton.IsEnabled = false;
+			SetVersionText("checking...");
+			try
+			{
+				var repository = Environment.GetEnvironmentVariable(VersionChecker.RepositoryEnvironmentVariable);
+				if(string.IsNullOrWhiteSpace(repository))
+					repository = VersionChecker.DefaultRepository;
+				var token = Environment.GetEnvironmentVariable(VersionChecker.TokenEnvironmentVariable);
+				var result = await VersionChecker.CheckLatestAsync(repository, _installedVersion, token, cancellation.Token);
+				if(_windowClosed || cancellation.IsCancellationRequested)
+					return;
+				if(result.UpdateAvailable)
+					SetUpdateAvailable(result);
+				else
+					SetVersionText("latest");
+			}
+			catch(OperationCanceledException)
+			{
+				if(!_windowClosed)
+				{
+					SetVersionText("check failed");
+					PluginLogger.Warn("Update check timed out or was canceled.");
+				}
+			}
+			catch(Exception ex)
+			{
+				if(!_windowClosed)
+				{
+					SetVersionText("check failed");
+					PluginLogger.Warn("Update check failed (" + ex.GetType().Name + ").");
+				}
+			}
+			finally
+			{
+				if(ReferenceEquals(_updateCancellation, cancellation))
+					_updateCancellation = null;
+				cancellation.Dispose();
+				if(!_windowClosed)
+					_updateButton.IsEnabled = true;
+			}
+		}
+
+		private void SetVersionText(string? status = null)
+		{
+			_versionText.Inlines.Clear();
+			_versionText.Text = "Version " + _installedVersion + (string.IsNullOrEmpty(status) ? string.Empty : " — " + status);
+		}
+
+		private void SetUpdateAvailable(VersionCheckResult result)
+		{
+			_versionText.Inlines.Clear();
+			_versionText.Inlines.Add(new Run("Version " + _installedVersion + " — "));
+			var link = new Hyperlink(new Run("update " + result.LatestVersion + " available"))
+			{
+				ToolTip = "Open the latest release download page"
+			};
+			link.Click += (_, __) => OpenReleasePage(result.Repository);
+			_versionText.Inlines.Add(link);
+		}
+
+		private static void OpenReleasePage(string repository)
+		{
+			try
+			{
+				repository = VersionChecker.ValidateRepository(repository);
+				Process.Start(new ProcessStartInfo
+				{
+					FileName = "https://github.com/" + repository + "/releases/latest",
+					UseShellExecute = true
+				});
+			}
+			catch(Exception ex)
+			{
+				PluginLogger.Warn("Could not open the release page (" + ex.GetType().Name + ").");
+			}
 		}
 
 		private UIElement BuildGeneralTab()
@@ -71,6 +199,7 @@ namespace OpponentMemory
 			_resultColors.Checked += (_, __) => SyncResultColorControls(_resultColors); _resultColors.Unchecked += (_, __) => SyncResultColorControls(_resultColors);
 			_zeros = AddCheck(panel, "Show zero values", _draft.ShowZeroValues);
 			_ghosts = AddCheck(panel, "Count ghost encounters", _draft.CountGhostEncounters);
+			_hideWhenUnfocused = AddCheck(panel, "Hide overlay when Hearthstone is not in focus", _draft.HideOverlayWhenHearthstoneIsNotFocused);
 			var defaults = new Button { Content = "Reset settings", HorizontalAlignment = HorizontalAlignment.Left, MinWidth = 120, Margin = new Thickness(0, 4, 0, 0) };
 			defaults.Click += (_, __) => { _draft = OpponentMemorySettings.CreateDefaults(); Populate(); };
 			panel.Children.Add(defaults);
@@ -126,7 +255,7 @@ namespace OpponentMemory
 			_draft.CounterSide = _side.SelectedItem is CounterSide side ? side : CounterSide.Right;
 			_draft.ShowEncounterCounts = _counts.IsChecked == true; _draft.ShowLastCombatDamage = _damage.IsChecked == true; _draft.HighlightLastOpponent = _highlight.IsChecked == true;
 			_draft.ColorLastOpponentByCombatResult = _resultColors.IsChecked == true;
-			_draft.ShowZeroValues = _zeros.IsChecked == true; _draft.CountGhostEncounters = _ghosts.IsChecked == true;
+			_draft.ShowZeroValues = _zeros.IsChecked == true; _draft.CountGhostEncounters = _ghosts.IsChecked == true; _draft.HideOverlayWhenHearthstoneIsNotFocused = _hideWhenUnfocused.IsChecked == true;
 			_draft.HorizontalOffset = _horizontal.Value; _draft.PerRowHorizontalOffset = _perRowHorizontal.Value; _draft.VerticalOffset = _vertical.Value; _draft.NextOpponentExtraOffset = _nextOffset.Value;
 			_draft.Scale = _scale.Value / 100d; _draft.TextStyle = SelectedTextStyle(_textStyle); _draft.FontSize = _fontSize.Value; _draft.TextOpacity = _textOpacity.Value; _draft.BackgroundOpacity = _backgroundOpacity.Value;
 			_draft.FontFamily = _font.Text; _draft.BoldText = _bold.IsChecked == true; _draft.NormalTextColor = ColorValue(_normal); _draft.LastOpponentTextColor = ColorValue(_last); _draft.WinTextColor = ColorValue(_win); _draft.LossTextColor = ColorValue(_loss); _draft.DrawTextColor = ColorValue(_draw); _draft.BackgroundColor = ColorValue(_background);
@@ -135,7 +264,7 @@ namespace OpponentMemory
 
 		private void Populate()
 		{
-			_enabled.IsChecked = _draft.Enabled; _side.SelectedItem = _draft.CounterSide; _counts.IsChecked = _draft.ShowEncounterCounts; _damage.IsChecked = _draft.ShowLastCombatDamage; _highlight.IsChecked = _draft.HighlightLastOpponent; _resultColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _resultColorsInColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _zeros.IsChecked = _draft.ShowZeroValues; _ghosts.IsChecked = _draft.CountGhostEncounters;
+			_enabled.IsChecked = _draft.Enabled; _side.SelectedItem = _draft.CounterSide; _counts.IsChecked = _draft.ShowEncounterCounts; _damage.IsChecked = _draft.ShowLastCombatDamage; _highlight.IsChecked = _draft.HighlightLastOpponent; _resultColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _resultColorsInColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _zeros.IsChecked = _draft.ShowZeroValues; _ghosts.IsChecked = _draft.CountGhostEncounters; _hideWhenUnfocused.IsChecked = _draft.HideOverlayWhenHearthstoneIsNotFocused;
 			_textStyle.SelectedItem = TextStyleName(_draft.TextStyle); _horizontal.Value = _draft.HorizontalOffset; _perRowHorizontal.Value = _draft.PerRowHorizontalOffset; _vertical.Value = _draft.VerticalOffset; _nextOffset.Value = _draft.NextOpponentExtraOffset; _scale.Value = _draft.Scale * 100; _fontSize.Value = _draft.FontSize; _textOpacity.Value = _draft.TextOpacity; _backgroundOpacity.Value = _draft.BackgroundOpacity;
 			_font.Text = _draft.FontFamily; _bold.IsChecked = _draft.BoldText; SelectColor(_normal, _draft.NormalTextColor); SelectColor(_last, _draft.LastOpponentTextColor); SelectColor(_win, _draft.WinTextColor); SelectColor(_loss, _draft.LossTextColor); SelectColor(_draw, _draft.DrawTextColor); SelectColor(_background, _draft.BackgroundColor); UpdateColorControls();
 		}

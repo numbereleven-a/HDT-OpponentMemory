@@ -26,6 +26,7 @@ namespace OpponentMemory
 		public bool HighlightLastOpponent { get; set; } = true;
 		public bool ColorLastOpponentByCombatResult { get; set; }
 		public bool CountGhostEncounters { get; set; } = true;
+		public bool HideOverlayWhenHearthstoneIsNotFocused { get; set; } = true;
 		public string FontFamily { get; set; } = "Segoe UI";
 		public double FontSize { get; set; } = 22;
 		public bool BoldText { get; set; } = true;
@@ -74,6 +75,7 @@ namespace OpponentMemory
 			HighlightLastOpponent = source.HighlightLastOpponent;
 			ColorLastOpponentByCombatResult = source.ColorLastOpponentByCombatResult;
 			CountGhostEncounters = source.CountGhostEncounters;
+			HideOverlayWhenHearthstoneIsNotFocused = source.HideOverlayWhenHearthstoneIsNotFocused;
 			FontFamily = source.FontFamily;
 			FontSize = source.FontSize;
 			BoldText = source.BoldText;

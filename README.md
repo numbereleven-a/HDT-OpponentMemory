@@ -26,6 +26,8 @@ The plugin is intended for the Windows version of HDT.
 * Places counters on either side of the leaderboard portraits
 * Supports custom positioning and per-row horizontal adjustments
 * Includes scale, font, text style, color and opacity settings
+* Can hide the overlay when Hearthstone is not in focus
+* Includes a manual update check in the settings window
 * Keeps encounter data in memory only for the current match
 * Works locally without telemetry, analytics or gameplay data uploads
 
@@ -57,12 +59,15 @@ Available settings include:
 * Highlight the last opponent
 * Show zero values
 * Count ghost encounters
+* Hide the overlay when Hearthstone is not in focus
 * Horizontal and vertical positioning
 * Per-row horizontal adjustment
 * Next-opponent extra offset
 * Scale and font
 * Text and background colors
 * Text and background opacity
+
+Use the `↻` button beside the installed version to check for a newer GitHub release. The check only runs when the button is pressed and does not download or install files automatically.
 
 ## Installation
 

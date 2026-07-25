@@ -4,7 +4,7 @@ namespace OpponentMemory
 {
 	internal static class PluginLogger
 	{
-		internal static void Info(string message) => Log.Info("[OpponentMemory] " + message);
-		internal static void Warn(string message) => Log.Warn("[OpponentMemory] " + message);
+		internal static void Info(string message) => Log.Info("[OpponentMemory] " + message, "OpponentMemory", string.Empty);
+		internal static void Warn(string message) => Log.Warn("[OpponentMemory] " + message, "OpponentMemory", string.Empty);
 	}
 }

@@ -54,6 +54,12 @@ namespace OpponentMemory.Tests
 			RestoredDrawIgnoresReplayedDamage();
 			MissingRestoredDataDoesNotBecomeADraw();
 			InterruptedStateDoesNotLeakIntoTheNextCombat();
+			ReleaseVersionsAreNormalized();
+			ReleaseVersionsCompareMissingComponentsAsZero();
+			StableReleaseIsNewerThanPrerelease();
+			PrereleaseNumericIdentifiersAreComparedNumerically();
+			InvalidReleaseVersionIsRejected();
+			InvalidUpdateRepositoryIsRejected();
 			Console.WriteLine("All Opponent Memory tests passed.");
 			return 0;
 		}
@@ -141,7 +147,8 @@ namespace OpponentMemory.Tests
 		private static void SettingsAreClamped()
 		{
 			var settings = new OpponentMemorySettings { Scale = 9, TextOpacity = -1, FontSize = double.NaN, TextStyle = (OverlayTextStyle)99 }; settings.Normalize();
-			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); Equal(OverlayTextStyle.Outlined, settings.TextStyle, "outlined text is the default fallback"); True(settings.ShowEncounterCounts, "counts visible by default"); False(settings.ShowLastCombatDamage, "damage is hidden by default"); True(settings.HighlightLastOpponent, "highlight visible by default"); False(settings.ColorLastOpponentByCombatResult, "result coloring is opt-in"); Equal("Blue", settings.WinTextColor, "default win color"); Equal("Red", settings.LossTextColor, "default loss color"); Equal("Yellow", settings.DrawTextColor, "default draw color");
+			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); Equal(OverlayTextStyle.Outlined, settings.TextStyle, "outlined text is the default fallback"); True(settings.ShowEncounterCounts, "counts visible by default"); False(settings.ShowLastCombatDamage, "damage is hidden by default"); True(settings.HighlightLastOpponent, "highlight visible by default"); False(settings.ColorLastOpponentByCombatResult, "result coloring is opt-in"); True(settings.HideOverlayWhenHearthstoneIsNotFocused, "overlay hides outside Hearthstone by default"); Equal("Blue", settings.WinTextColor, "default win color"); Equal("Red", settings.LossTextColor, "default loss color"); Equal("Yellow", settings.DrawTextColor, "default draw color");
+			var copy = new OpponentMemorySettings(); copy.CopyFrom(new OpponentMemorySettings { HideOverlayWhenHearthstoneIsNotFocused = false }); False(copy.HideOverlayWhenHearthstoneIsNotFocused, "focus setting is copied");
 		}
 
 		private static void StandardLeaderboardWaitsForEightPlayers()
@@ -404,8 +411,49 @@ namespace OpponentMemory.Tests
 			False(gate.WasInterrupted, "next combat starts without the previous interruption");
 		}
 
+		private static void ReleaseVersionsAreNormalized()
+		{
+			Equal("2.8.1-beta.1", VersionChecker.NormalizeTag("v2.8.1-beta.1"), "release tag is normalized for display");
+		}
+
+		private static void ReleaseVersionsCompareMissingComponentsAsZero()
+		{
+			Equal(0, VersionChecker.CompareTagToInstalledVersion("v2.8", new Version(2, 8, 0, 0)), "missing release components are zero");
+			Equal(0, VersionChecker.CompareTagToInstalledVersion("2.8.0.0", new Version(2, 8)), "missing installed components are zero");
+		}
+
+		private static void StableReleaseIsNewerThanPrerelease()
+		{
+			True(VersionChecker.CompareTagToInstalledVersion("2.8.1", new Version(2, 8, 0)) > 0, "stable newer release is detected");
+			True(VersionChecker.CompareTagToInstalledVersion("2.8.1-beta.1", new Version(2, 8, 1)) < 0, "prerelease is older than matching stable version");
+		}
+
+		private static void PrereleaseNumericIdentifiersAreComparedNumerically()
+		{
+			True(VersionChecker.CompareTagToInstalledVersion("2.8.1-beta.10", new Version(2, 8, 0)) > 0, "prerelease with newer core is newer than installed version");
+			True(VersionChecker.CompareTags("2.8.1-beta.10", "2.8.1-beta.2") > 0, "numeric prerelease identifiers use numeric ordering");
+			Equal("2.8.1-beta.10", VersionChecker.NormalizeTag("V2.8.1-beta.10"), "numeric prerelease identifier is preserved");
+		}
+
+		private static void InvalidReleaseVersionIsRejected()
+		{
+			Throws<FormatException>(() => VersionChecker.NormalizeTag("release-latest"), "invalid release tag is rejected");
+		}
+
+		private static void InvalidUpdateRepositoryIsRejected()
+		{
+			Throws<ArgumentException>(() => VersionChecker.ValidateRepository("owner/repository/extra"), "repository with an extra path is rejected");
+			Throws<ArgumentException>(() => VersionChecker.ValidateRepository("../repository"), "repository traversal is rejected");
+		}
+
 		private static void True(bool value, string name) { if(!value) throw new InvalidOperationException(name); }
 		private static void False(bool value, string name) { if(value) throw new InvalidOperationException(name); }
 		private static void Equal<T>(T expected, T actual, string name) { if(!Equals(expected, actual)) throw new InvalidOperationException(name + ": expected " + expected + ", actual " + actual); }
+		private static void Throws<TException>(Action action, string name) where TException : Exception
+		{
+			try { action(); }
+			catch(TException) { return; }
+			throw new InvalidOperationException(name + ": expected " + typeof(TException).Name);
+		}
 	}
 }
