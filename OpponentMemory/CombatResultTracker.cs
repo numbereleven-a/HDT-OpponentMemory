@@ -46,6 +46,12 @@ namespace OpponentMemory
 				|| clientHandleAtStart.HasValue && currentClientHandle.HasValue && clientHandleAtStart != currentClientHandle;
 		}
 
+		public static bool HasCombatCompletionEvidence(
+			int playerTurnStartGenerationAtCombatStart,
+			int currentPlayerTurnStartGeneration,
+			bool stateRestoredDuringCombat)
+			=> stateRestoredDuringCombat || playerTurnStartGenerationAtCombatStart != currentPlayerTurnStartGeneration;
+
 		public void StartCombat(int localPlayerId, int opponentPlayerId, int? localDurability, int? opponentDurability, bool opponentWasGhost)
 		{
 			if(localPlayerId <= 0 || opponentPlayerId <= 0 || localPlayerId == opponentPlayerId)

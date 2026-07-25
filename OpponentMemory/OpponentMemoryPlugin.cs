@@ -217,11 +217,21 @@ namespace OpponentMemory
 			var localDurability = _resolver.GetHeroDurability(localPlayerId);
 			var opponentDurability = _resolver.GetHeroDurability(opponentPlayerId);
 			var resultStateReady = localDurability.HasValue && (_tracker.ActiveCombatWasGhost || opponentDurability.HasValue);
-			var completionStateReady = !_combatCompletionGate.WasInterrupted
-				|| _resolver.HasRestoredGameState()
-				|| _playerTurnStartGenerationAtCombatStart != Volatile.Read(ref _playerTurnStartGeneration);
-			if(!_combatCompletionGate.CanFinalize(DateTime.UtcNow, true, completionStateReady, resultStateReady))
+			var completionStateReady = CombatResultTracker.HasCombatCompletionEvidence(
+				_playerTurnStartGenerationAtCombatStart,
+				Volatile.Read(ref _playerTurnStartGeneration),
+				stateRestoredDuringCombat);
+			var completionDecision = _combatCompletionGate.Evaluate(DateTime.UtcNow, true, completionStateReady, resultStateReady);
+			if(completionDecision == CombatCompletionDecision.Wait)
 				return false;
+			if(completionDecision == CombatCompletionDecision.Abandon)
+			{
+				_tracker.AbandonCombat();
+				ClearActiveCombatRuntimeState();
+				_forceOverlayRefresh = true;
+				PluginLogger.Info("Ignored an unconfirmed combat phase transition.");
+				return false;
+			}
 			if(_combatCompletionGate.WasInterrupted)
 				_combatResultTracker.DiscardRecordedDamage();
 			var completedCombat = _combatResultTracker.CompleteCombatWithDamage(
@@ -236,15 +246,20 @@ namespace OpponentMemory
 				_lastCombatOutcome = completedCombat.Outcome;
 				_lastCombatDamage = completedCombat.ExactDamage;
 			}
+			ClearActiveCombatRuntimeState();
+			_forceOverlayRefresh = true;
+			return true;
+		}
+
+		private void ClearActiveCombatRuntimeState()
+		{
 			_combatResultTracker.Reset();
 			_combatCompletionGate.Reset();
-			_forceOverlayRefresh = true;
 			_restoredStateAtCombatStart = false;
 			_clientHandleAtCombatStart = null;
 			_gameStartGenerationAtCombatStart = Volatile.Read(ref _gameStartGeneration);
 			_playerTurnStartGenerationAtCombatStart = Volatile.Read(ref _playerTurnStartGeneration);
 			_localPlayerIdAtCombatStart = 0;
-			return true;
 		}
 
 		internal void HandleGameStart()

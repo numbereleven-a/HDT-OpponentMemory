@@ -64,6 +64,13 @@ namespace OpponentMemory
 			return true;
 		}
 
+		public void AbandonCombat()
+		{
+			ActiveCombatOpponentPlayerId = null;
+			ActiveCombatRound = null;
+			ActiveCombatWasGhost = false;
+		}
+
 		public int GetCount(int playerId) => _counts.TryGetValue(playerId, out var count) ? count : 0;
 
 		public void Reset()

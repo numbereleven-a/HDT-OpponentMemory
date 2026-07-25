@@ -54,6 +54,9 @@ namespace OpponentMemory.Tests
 			RestoredDrawIgnoresReplayedDamage();
 			MissingRestoredDataDoesNotBecomeADraw();
 			InterruptedStateDoesNotLeakIntoTheNextCombat();
+			CombatCompletionRequiresPositiveEvidence();
+			UnconfirmedCombatTransitionIsAbandoned();
+			AbandonedCombatDoesNotMoveEncounterData();
 			ReleaseVersionsAreNormalized();
 			ReleaseVersionsCompareMissingComponentsAsZero();
 			StableReleaseIsNewerThanPrerelease();
@@ -409,6 +412,35 @@ namespace OpponentMemory.Tests
 			gate.Reset();
 			gate.Begin(false);
 			False(gate.WasInterrupted, "next combat starts without the previous interruption");
+		}
+
+		private static void CombatCompletionRequiresPositiveEvidence()
+		{
+			False(CombatResultTracker.HasCombatCompletionEvidence(5, 5, false), "a phase flag change alone does not complete combat");
+			True(CombatResultTracker.HasCombatCompletionEvidence(5, 6, false), "a new shopping turn confirms combat completion");
+			True(CombatResultTracker.HasCombatCompletionEvidence(5, 5, true), "state restoration can confirm a missed combat boundary");
+		}
+
+		private static void UnconfirmedCombatTransitionIsAbandoned()
+		{
+			var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+			var gate = new CombatCompletionGate();
+			gate.Begin(false);
+			Equal(CombatCompletionDecision.Wait, gate.Evaluate(now, true, false, true), "unconfirmed phase transition waits");
+			Equal(CombatCompletionDecision.Abandon, gate.Evaluate(now.AddSeconds(10), true, false, true), "unconfirmed phase transition is abandoned instead of counted");
+		}
+
+		private static void AbandonedCombatDoesNotMoveEncounterData()
+		{
+			var tracker = new EncounterTracker();
+			tracker.Schedule(1, 2); tracker.StartCombat(1); tracker.CompleteCombat(true);
+			tracker.Schedule(2, 3); tracker.StartCombat(2); tracker.AbandonCombat();
+			Equal(1, tracker.GetCount(2), "previous opponent count remains unchanged");
+			Equal(0, tracker.GetCount(3), "future opponent is not counted");
+			Equal<int?>(2, tracker.LastCompletedOpponentPlayerId, "last opponent remains unchanged");
+			Equal<int?>(1, tracker.LastCountedRound, "abandoned round is not marked counted");
+			tracker.Schedule(2, 3);
+			True(tracker.StartCombat(2), "real combat can still start in the same round");
 		}
 
 		private static void ReleaseVersionsAreNormalized()

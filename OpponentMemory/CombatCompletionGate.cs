@@ -2,6 +2,13 @@ using System;
 
 namespace OpponentMemory
 {
+	public enum CombatCompletionDecision
+	{
+		Wait,
+		Finalize,
+		Abandon
+	}
+
 	public sealed class CombatCompletionGate
 	{
 		private static readonly TimeSpan ResultDelay = TimeSpan.FromMilliseconds(100);
@@ -35,31 +42,37 @@ namespace OpponentMemory
 		}
 
 		public bool CanFinalize(DateTime nowUtc, bool isSupported, bool completionStateReady, bool resultStateReady)
+			=> Evaluate(nowUtc, isSupported, completionStateReady, resultStateReady) == CombatCompletionDecision.Finalize;
+
+		public CombatCompletionDecision Evaluate(DateTime nowUtc, bool isSupported, bool completionStateReady, bool resultStateReady)
 		{
 			if(!IsPending)
-				return false;
+				return CombatCompletionDecision.Wait;
 			if(!isSupported)
 			{
 				Suspend();
-				return false;
+				return CombatCompletionDecision.Wait;
 			}
 			if(!_supportedSinceUtc.HasValue)
 				_supportedSinceUtc = nowUtc;
 			if(!completionStateReady)
 			{
 				_stableSinceUtc = null;
-				return nowUtc - _supportedSinceUtc.Value >= CompletionStateTimeout;
+				return nowUtc - _supportedSinceUtc.Value >= CompletionStateTimeout
+					? CombatCompletionDecision.Abandon
+					: CombatCompletionDecision.Wait;
 			}
 			if(!_stableSinceUtc.HasValue)
 			{
 				_stableSinceUtc = nowUtc;
-				return false;
+				return CombatCompletionDecision.Wait;
 			}
 
 			var elapsed = nowUtc - _stableSinceUtc.Value;
-			return resultStateReady
+			var ready = resultStateReady
 				? elapsed >= ResultDelay
 				: elapsed >= MissingDataTimeout;
+			return ready ? CombatCompletionDecision.Finalize : CombatCompletionDecision.Wait;
 		}
 
 		public void Reset()
