@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using HearthDb.Enums;
 using Hearthstone_Deck_Tracker;
 using Hearthstone_Deck_Tracker.Enums;
@@ -54,7 +55,7 @@ namespace OpponentMemory
 			"GitHub: https://github.com/numbereleven-a/HDT-OpponentMemory";
 		public string ButtonText => "Settings";
 		public string Author => "numbereleven-a";
-		public Version Version => new Version(1, 7);
+		public Version Version => new Version(1, 7, 1);
 		public MenuItem MenuItem => _menuItem ??= BuildMenu();
 
 		public void OnLoad()
@@ -406,7 +407,7 @@ namespace OpponentMemory
 			if(_settingsWindow != null) { _settingsWindow.Activate(); return; }
 			_settingsWindow = new SettingsWindow(_settings, ApplySettings, Version);
 			var owner = Application.Current?.MainWindow;
-			if(owner != null && !ReferenceEquals(owner, _settingsWindow))
+			if(owner != null && !ReferenceEquals(owner, _settingsWindow) && new WindowInteropHelper(owner).Handle != IntPtr.Zero)
 				_settingsWindow.Owner = owner;
 			else
 				_settingsWindow.WindowStartupLocation = WindowStartupLocation.CenterScreen;
