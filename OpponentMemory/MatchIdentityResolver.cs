@@ -1,3 +1,5 @@
+using System;
+
 namespace OpponentMemory
 {
 	public readonly struct GameHandleSnapshot
@@ -69,6 +71,69 @@ namespace OpponentMemory
 				return new MatchIdentityDecision(MatchIdentityAction.StartNew, currentHandle);
 
 			return new MatchIdentityDecision(MatchIdentityAction.Preserve, currentHandle ?? storedHandle);
+		}
+	}
+
+	public sealed class MatchIdentityRecovery
+	{
+		private static readonly TimeSpan StableStateDelay = TimeSpan.FromSeconds(1);
+		private static readonly TimeSpan ReconnectDetectionTimeout = TimeSpan.FromSeconds(12);
+		private DateTime? _waitingSinceUtc;
+
+		public MatchIdentityDecision Evaluate(
+			uint? storedHandle,
+			bool afterMenu,
+			GameHandleSnapshot snapshot,
+			DateTime nowUtc,
+			int matchGameStartGeneration,
+			int currentGameStartGeneration,
+			bool restoredGameState)
+		{
+			var decision = MatchIdentityResolver.Evaluate(storedHandle, afterMenu, snapshot);
+			var gameStartChanged = currentGameStartGeneration != matchGameStartGeneration;
+			var identityComparisonUnavailable = !storedHandle.HasValue || !snapshot.AvailableHandle.HasValue;
+			var needsRecovery = !snapshot.HasConflict
+				&& identityComparisonUnavailable
+				&& (afterMenu || gameStartChanged);
+			if(!needsRecovery)
+			{
+				Reset();
+				return decision;
+			}
+
+			var action = EvaluateMissingHandle(
+				nowUtc,
+				matchGameStartGeneration,
+				currentGameStartGeneration,
+				restoredGameState);
+			var recoveredHandle = action == MatchIdentityAction.StartNew
+				? snapshot.AvailableHandle
+				: snapshot.AvailableHandle ?? storedHandle;
+			return new MatchIdentityDecision(action, recoveredHandle);
+		}
+
+		public void Reset() => _waitingSinceUtc = null;
+
+		private MatchIdentityAction EvaluateMissingHandle(
+			DateTime nowUtc,
+			int matchGameStartGeneration,
+			int currentGameStartGeneration,
+			bool restoredGameState)
+		{
+			if(!_waitingSinceUtc.HasValue)
+			{
+				_waitingSinceUtc = nowUtc;
+				return MatchIdentityAction.Wait;
+			}
+
+			if(restoredGameState)
+				return MatchIdentityAction.Preserve;
+
+			var elapsed = nowUtc - _waitingSinceUtc.Value;
+			if(matchGameStartGeneration == currentGameStartGeneration)
+				return elapsed >= StableStateDelay ? MatchIdentityAction.Preserve : MatchIdentityAction.Wait;
+
+			return elapsed >= ReconnectDetectionTimeout ? MatchIdentityAction.StartNew : MatchIdentityAction.Wait;
 		}
 	}
 

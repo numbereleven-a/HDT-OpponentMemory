@@ -20,6 +20,7 @@ namespace OpponentMemory
 		private readonly BattlegroundsPlayerResolver _resolver = new BattlegroundsPlayerResolver();
 		private readonly OpponentMemoryOverlay _overlay = new OpponentMemoryOverlay();
 		private readonly LeaderboardReadiness _leaderboardReadiness = new LeaderboardReadiness();
+		private readonly MatchIdentityRecovery _matchIdentityRecovery = new MatchIdentityRecovery();
 		private OpponentMemorySettings _settings = new OpponentMemorySettings();
 		private SettingsWindow? _settingsWindow;
 		private MenuItem? _menuItem;
@@ -43,6 +44,7 @@ namespace OpponentMemory
 		private bool _restoredStateAtCombatStart;
 		private long? _clientHandleAtCombatStart;
 		private int _gameStartGeneration;
+		private int _gameStartGenerationAtMatchIdentity;
 		private int _gameStartGenerationAtCombatStart;
 		private int _turnStartCompletionRequested;
 		private int _playerTurnStartGeneration;
@@ -55,7 +57,7 @@ namespace OpponentMemory
 			"GitHub: https://github.com/numbereleven-a/HDT-OpponentMemory";
 		public string ButtonText => "Settings";
 		public string Author => "numbereleven-a";
-		public Version Version => new Version(1, 7, 1);
+		public Version Version => new Version(1, 7, 2);
 		public MenuItem MenuItem => _menuItem ??= BuildMenu();
 
 		public void OnLoad()
@@ -330,7 +332,15 @@ namespace OpponentMemory
 				return true;
 			}
 
-			var decision = MatchIdentityResolver.Evaluate(_gameHandle, _sawMenu, gameHandles);
+			var currentGameStartGeneration = Volatile.Read(ref _gameStartGeneration);
+			var decision = _matchIdentityRecovery.Evaluate(
+				_gameHandle,
+				_sawMenu,
+				gameHandles,
+				DateTime.UtcNow,
+				_gameStartGenerationAtMatchIdentity,
+				currentGameStartGeneration,
+				_resolver.HasRestoredGameState());
 			if(decision.Action == MatchIdentityAction.Wait)
 				return false;
 			if(decision.Action == MatchIdentityAction.StartNew)
@@ -340,6 +350,8 @@ namespace OpponentMemory
 			}
 
 			_sawMenu = false;
+			_matchIdentityRecovery.Reset();
+			_gameStartGenerationAtMatchIdentity = currentGameStartGeneration;
 			if(decision.GameHandle.HasValue)
 				_gameHandle = decision.GameHandle;
 			return true;
@@ -355,6 +367,7 @@ namespace OpponentMemory
 			_restoredStateAtCombatStart = false;
 			_clientHandleAtCombatStart = null;
 			_gameStartGenerationAtCombatStart = Volatile.Read(ref _gameStartGeneration);
+			_gameStartGenerationAtMatchIdentity = Volatile.Read(ref _gameStartGeneration);
 			_playerTurnStartGenerationAtCombatStart = Volatile.Read(ref _playerTurnStartGeneration);
 			Interlocked.Exchange(ref _turnStartCompletionRequested, 0);
 			_localPlayerIdAtCombatStart = 0;
@@ -364,6 +377,7 @@ namespace OpponentMemory
 			_wasCombat = null;
 			_wasSupported = false;
 			_leaderboardReadiness.Reset();
+			_matchIdentityRecovery.Reset();
 			ResetGhostStatusCache();
 			_forceOverlayRefresh = true;
 			PluginLogger.Info("New match state initialized.");
@@ -379,6 +393,7 @@ namespace OpponentMemory
 			_restoredStateAtCombatStart = false;
 			_clientHandleAtCombatStart = null;
 			_gameStartGenerationAtCombatStart = Volatile.Read(ref _gameStartGeneration);
+			_gameStartGenerationAtMatchIdentity = Volatile.Read(ref _gameStartGeneration);
 			_playerTurnStartGenerationAtCombatStart = Volatile.Read(ref _playerTurnStartGeneration);
 			Interlocked.Exchange(ref _turnStartCompletionRequested, 0);
 			_localPlayerIdAtCombatStart = 0;
@@ -388,6 +403,7 @@ namespace OpponentMemory
 			_sawMenu = false;
 			_gameHandle = null;
 			_leaderboardReadiness.Reset();
+			_matchIdentityRecovery.Reset();
 			ResetGhostStatusCache();
 		}
 

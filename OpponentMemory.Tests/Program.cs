@@ -27,6 +27,12 @@ namespace OpponentMemory.Tests
 			MatchIdentityPreservesMatchingHandleAfterMenu();
 			MatchIdentityWaitsForAmbiguousConflict();
 			MatchIdentityPreservesStoredHandleDuringActiveConflict();
+			MissingHandlePreservesAConfirmedReconnect();
+			LateHandlePreservesAConfirmedReconnect();
+			MissingHandleStartsANewMatchAfterReconnectDetectionTimesOut();
+			MissingHandleDetectsANewGameWithoutAMenuTick();
+			MissingHandlePreservesStateWithoutANewGameStart();
+			MissingHandleRecoveryResetStartsANewWaitPeriod();
 			MatchEndPolicyRequiresAConfirmedResult();
 			CombatResultWinIsDetected();
 			CombatResultLossIsDetected();
@@ -209,6 +215,67 @@ namespace OpponentMemory.Tests
 			var decision = MatchIdentityResolver.Evaluate(200, false, new GameHandleSnapshot(100, 200));
 			Equal(MatchIdentityAction.Preserve, decision.Action, "active match keeps its known handle during a transient conflict");
 			Equal<uint?>(200, decision.GameHandle, "known active handle is retained");
+		}
+
+		private static void MissingHandlePreservesAConfirmedReconnect()
+		{
+			var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+			var recovery = new MatchIdentityRecovery();
+			var missing = new GameHandleSnapshot(null, null);
+			Equal(MatchIdentityAction.Wait, recovery.Evaluate(100, true, missing, now, 10, 11, false).Action, "missing handle waits for reconnect detection");
+			var decision = recovery.Evaluate(100, true, missing, now.AddSeconds(2), 10, 11, true);
+			Equal(MatchIdentityAction.Preserve, decision.Action, "confirmed reconnect preserves encounter state");
+			Equal<uint?>(100, decision.GameHandle, "confirmed reconnect retains the stored handle");
+		}
+
+		private static void MissingHandleStartsANewMatchAfterReconnectDetectionTimesOut()
+		{
+			var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+			var recovery = new MatchIdentityRecovery();
+			var missing = new GameHandleSnapshot(null, null);
+			recovery.Evaluate(100, true, missing, now, 20, 21, false);
+			Equal(MatchIdentityAction.Wait, recovery.Evaluate(100, true, missing, now.AddSeconds(11), 20, 21, false).Action, "new game waits for the full reconnect window");
+			Equal(MatchIdentityAction.StartNew, recovery.Evaluate(100, true, missing, now.AddSeconds(12), 20, 21, false).Action, "missing handle no longer blocks a new match indefinitely");
+		}
+
+		private static void LateHandlePreservesAConfirmedReconnect()
+		{
+			var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+			var recovery = new MatchIdentityRecovery();
+			var lateHandle = new GameHandleSnapshot(200, 200);
+			Equal(MatchIdentityAction.Wait, recovery.Evaluate(null, true, lateHandle, now, 15, 16, false).Action, "a late handle remains ambiguous while reconnect detection is pending");
+			var decision = recovery.Evaluate(null, true, lateHandle, now.AddSeconds(2), 15, 16, true);
+			Equal(MatchIdentityAction.Preserve, decision.Action, "a late handle does not erase state after a confirmed reconnect");
+			Equal<uint?>(200, decision.GameHandle, "a late handle becomes the stored match identity");
+		}
+
+		private static void MissingHandleDetectsANewGameWithoutAMenuTick()
+		{
+			var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+			var recovery = new MatchIdentityRecovery();
+			var missing = new GameHandleSnapshot(null, null);
+			recovery.Evaluate(100, false, missing, now, 50, 51, false);
+			Equal(MatchIdentityAction.StartNew, recovery.Evaluate(100, false, missing, now.AddSeconds(12), 50, 51, false).Action, "a new game-start event prevents state from carrying over even when no menu tick was observed");
+		}
+
+		private static void MissingHandlePreservesStateWithoutANewGameStart()
+		{
+			var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+			var recovery = new MatchIdentityRecovery();
+			var missing = new GameHandleSnapshot(null, null);
+			recovery.Evaluate(100, true, missing, now, 30, 30, false);
+			Equal(MatchIdentityAction.Wait, recovery.Evaluate(100, true, missing, now.AddMilliseconds(900), 30, 30, false).Action, "transient menu state must stabilize");
+			Equal(MatchIdentityAction.Preserve, recovery.Evaluate(100, true, missing, now.AddSeconds(1), 30, 30, false).Action, "transient menu state preserves the active match");
+		}
+
+		private static void MissingHandleRecoveryResetStartsANewWaitPeriod()
+		{
+			var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+			var recovery = new MatchIdentityRecovery();
+			var missing = new GameHandleSnapshot(null, null);
+			recovery.Evaluate(100, true, missing, now, 40, 41, false);
+			recovery.Reset();
+			Equal(MatchIdentityAction.Wait, recovery.Evaluate(100, true, missing, now.AddSeconds(20), 40, 41, false).Action, "reset clears the previous timeout");
 		}
 
 		private static void MatchEndPolicyRequiresAConfirmedResult()
