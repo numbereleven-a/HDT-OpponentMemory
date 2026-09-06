@@ -70,8 +70,12 @@ namespace OpponentMemory
 
 		public void RecordHeroDamage(int damagedPlayerId, int? exactDamage = null)
 		{
+			if(exactDamage.HasValue && exactDamage.Value <= 0)
+				return;
 			lock(_sync)
 			{
+				if(!exactDamage.HasValue && _recordedDamageAmount.HasValue)
+					return;
 				if(damagedPlayerId == _localPlayerId || damagedPlayerId == _opponentPlayerId)
 				{
 					_damagedPlayerId = damagedPlayerId;
@@ -100,11 +104,11 @@ namespace OpponentMemory
 					return new CompletedCombat(CombatOutcome.Unknown, null);
 
 				var localDamage = GetDurabilityLoss(_localDurabilityAtStart, localDurability);
-				var opponentDamage = _opponentWasGhost ? 0 : GetDurabilityLoss(_opponentDurabilityAtStart, opponentDurability);
+				var opponentDamage = _opponentWasGhost ? null : GetDurabilityLoss(_opponentDurabilityAtStart, opponentDurability);
 				CombatOutcome outcome;
-				if(localDamage > 0 && opponentDamage == 0)
+				if(localDamage > 0 && !(opponentDamage > 0))
 					outcome = CombatOutcome.Loss;
-				else if(opponentDamage > 0 && localDamage == 0)
+				else if(opponentDamage > 0 && !(localDamage > 0))
 					outcome = CombatOutcome.Win;
 				else if(_damagedPlayerId == _localPlayerId)
 					outcome = CombatOutcome.Loss;
@@ -113,7 +117,8 @@ namespace OpponentMemory
 				else if(localPlayerWonLastCombat)
 					outcome = CombatOutcome.Win;
 				else
-					outcome = assumeDrawIfNoDamage ? CombatOutcome.Draw : CombatOutcome.Unknown;
+					outcome = assumeDrawIfNoDamage && localDamage == 0 && opponentDamage == 0
+						? CombatOutcome.Draw : CombatOutcome.Unknown;
 
 				int? exactDamage = null;
 				if(outcome == CombatOutcome.Draw)
@@ -138,14 +143,14 @@ namespace OpponentMemory
 				ClearActiveCombat();
 		}
 
-		private static int GetDurabilityLoss(int? before, int? after)
+		private static int? GetDurabilityLoss(int? before, int? after)
 		{
-			if(!before.HasValue || !after.HasValue)
-				return 0;
-			return Math.Max(0, before.Value - after.Value);
+			if(!before.HasValue || !after.HasValue || after.Value > before.Value)
+				return null;
+			return before.Value - after.Value;
 		}
 
-		private static int? PositiveValue(int value) => value > 0 ? value : (int?)null;
+		private static int? PositiveValue(int? value) => value > 0 ? value : null;
 
 		private void ClearActiveCombat()
 		{

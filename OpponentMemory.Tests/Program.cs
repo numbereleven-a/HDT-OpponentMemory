@@ -9,6 +9,9 @@ namespace OpponentMemory.Tests
 		private static int Main()
 		{
 			FirstCombatIsCounted();
+			IncompleteCombatObservationsStayUnknown();
+			DamageEvidenceSurvivesIncompleteObservations();
+			WeakDamageEventsDoNotEraseExactDamage();
 			RepeatedCombatIsCounted();
 			ScheduledOpponentIsNotCountedEarly();
 			DuplicateRoundIsIgnored();
@@ -71,6 +74,64 @@ namespace OpponentMemory.Tests
 			InvalidUpdateRepositoryIsRejected();
 			Console.WriteLine("All Opponent Memory tests passed.");
 			return 0;
+		}
+
+		private static void IncompleteCombatObservationsStayUnknown()
+		{
+			foreach(var starts in new[] { new int?[] { null, null }, new int?[] { 35, null }, new int?[] { null, 20 } })
+			{
+				var tracker = new CombatResultTracker();
+				tracker.StartCombat(1, 2, starts[0], starts[1], false);
+				tracker.RecordHeroDamage(1, 12);
+				tracker.DiscardRecordedDamage();
+				var result = tracker.CompleteCombatWithDamage(2, 35, 20, false, true);
+				Equal(CombatOutcome.Unknown, result.Outcome, "missing starting durability cannot prove a restored draw");
+				Equal<int?>(null, result.ExactDamage, "unknown result has no exact damage");
+			}
+			var ghost = new CombatResultTracker();
+			ghost.StartCombat(1, 2, 35, -5, true);
+			var ghostResult = ghost.CompleteCombatWithDamage(2, 35, -5, false, true);
+			Equal(CombatOutcome.Unknown, ghostResult.Outcome, "unchanged ghost durability cannot distinguish a win from a draw");
+			Equal<int?>(null, ghostResult.ExactDamage, "unconfirmed ghost result has no damage");
+			var healed = new CombatResultTracker();
+			healed.StartCombat(1, 2, 30, 20, false);
+			Equal(CombatOutcome.Unknown, healed.CompleteCombat(2, 35, 20, false, true), "increased durability does not prove a draw");
+		}
+
+		private static void DamageEvidenceSurvivesIncompleteObservations()
+		{
+			foreach(var ghost in new[] { false, true })
+			foreach(var target in new[] { 1, 2 })
+			{
+				var tracker = new CombatResultTracker();
+				tracker.StartCombat(1, 2, null, null, ghost);
+				tracker.RecordHeroDamage(target, 12);
+				var result = tracker.CompleteCombatWithDamage(2, 35, 20, false, true);
+				Equal(target == 1 ? CombatOutcome.Loss : CombatOutcome.Win, result.Outcome, "damage event determines outcome without starting durability");
+				Equal<int?>(12, result.ExactDamage, "exact event remains usable");
+			}
+			var loss = new CombatResultTracker();
+			loss.StartCombat(1, 2, 40, null, true);
+			Equal(CombatOutcome.Loss, loss.CompleteCombat(2, 30, null, false, true), "local durability loss proves a ghost loss");
+		}
+
+		private static void WeakDamageEventsDoNotEraseExactDamage()
+		{
+			foreach(var weakValue in new int?[] { 0, -1, null })
+			foreach(var target in new[] { 1, 2 })
+			{
+				var tracker = new CombatResultTracker();
+				tracker.StartCombat(1, 2, null, null, false);
+				tracker.RecordHeroDamage(2, 12);
+				tracker.RecordHeroDamage(target, weakValue);
+				var result = tracker.CompleteCombatWithDamage(2, null, null, false, true);
+				Equal(CombatOutcome.Win, result.Outcome, "weaker event cannot overwrite the exact hit side");
+				Equal<int?>(12, result.ExactDamage, "weaker event cannot erase exact damage");
+			}
+			var zero = new CombatResultTracker();
+			zero.StartCombat(1, 2, null, null, false);
+			zero.RecordHeroDamage(1, 0);
+			Equal(CombatOutcome.Unknown, zero.CompleteCombat(2, null, null, false, true), "zero is not evidence of a hit");
 		}
 
 		private static void FirstCombatIsCounted()
