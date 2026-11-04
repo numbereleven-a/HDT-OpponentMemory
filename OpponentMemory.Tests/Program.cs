@@ -24,6 +24,7 @@ namespace OpponentMemory.Tests
 			ResetClearsMatchState();
 			RestoredStateDoesNotInventHistory();
 			SettingsAreClamped();
+			OpponentInfoPreservesUnknownAndSeventhTier();
 			StandardLeaderboardWaitsForEightPlayers();
 			PartialLeaderboardRequiresStability();
 			MatchIdentityUsesNewStatsHandleAfterMenu();
@@ -217,8 +218,20 @@ namespace OpponentMemory.Tests
 		private static void SettingsAreClamped()
 		{
 			var settings = new OpponentMemorySettings { Scale = 9, TextOpacity = -1, FontSize = double.NaN, TextStyle = (OverlayTextStyle)99 }; settings.Normalize();
-			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); Equal(OverlayTextStyle.Outlined, settings.TextStyle, "outlined text is the default fallback"); True(settings.ShowEncounterCounts, "counts visible by default"); False(settings.ShowLastCombatDamage, "damage is hidden by default"); True(settings.HighlightLastOpponent, "highlight visible by default"); False(settings.ColorLastOpponentByCombatResult, "result coloring is opt-in"); True(settings.HideOverlayWhenHearthstoneIsNotFocused, "overlay hides outside Hearthstone by default"); Equal("Blue", settings.WinTextColor, "default win color"); Equal("Red", settings.LossTextColor, "default loss color"); Equal("Yellow", settings.DrawTextColor, "default draw color");
+			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); Equal(OverlayTextStyle.Outlined, settings.TextStyle, "outlined text is the default fallback"); False(settings.ShowEncounterCounts, "counts hidden by default"); True(settings.ShowLastCombatDamage, "damage visible by default"); Equal(CounterSide.Left, settings.CounterSide, "tier badges default to the left"); Equal(TavernTierStyle.Dice, settings.TierStyle, "dice are the default tier style"); True(settings.HighlightLastOpponent, "highlight visible by default"); False(settings.ColorLastOpponentByCombatResult, "result coloring is opt-in"); True(settings.HideOverlayWhenHearthstoneIsNotFocused, "overlay hides outside Hearthstone by default"); Equal("Blue", settings.WinTextColor, "default win color"); Equal("Red", settings.LossTextColor, "default loss color"); Equal("Yellow", settings.DrawTextColor, "default draw color");
 			var copy = new OpponentMemorySettings(); copy.CopyFrom(new OpponentMemorySettings { HideOverlayWhenHearthstoneIsNotFocused = false }); False(copy.HideOverlayWhenHearthstoneIsNotFocused, "focus setting is copied");
+		}
+
+		private static void OpponentInfoPreservesUnknownAndSeventhTier()
+		{
+			Equal<int?>(null, new LeaderboardPlayer(2, 1, false, false).TavernTier, "missing tier stays unknown");
+			Equal<int?>(7, new LeaderboardPlayer(2, 1, false, false, 7).TavernTier, "seventh tier is supported");
+			var settings = new OpponentMemorySettings { ShowOpponentTavernTier = false, OpponentInfoSize = 32, OpponentInfoSpacing = 12 };
+			var copy = new OpponentMemorySettings();
+			copy.CopyFrom(settings);
+			False(copy.ShowOpponentTavernTier, "tier visibility is copied");
+			Equal(32d, copy.OpponentInfoSize, "badge size is copied");
+			Equal(12d, copy.OpponentInfoSpacing, "badge spacing is copied");
 		}
 
 		private static void StandardLeaderboardWaitsForEightPlayers()

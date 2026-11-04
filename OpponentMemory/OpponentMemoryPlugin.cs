@@ -57,7 +57,7 @@ namespace OpponentMemory
 			"GitHub: https://github.com/numbereleven-a/HDT-OpponentMemory";
 		public string ButtonText => "Settings";
 		public string Author => "numbereleven-a";
-		public Version Version => new Version(1, 7, 3);
+		public Version Version => new Version(1, 8);
 		public MenuItem MenuItem => _menuItem ??= BuildMenu();
 
 		public void OnLoad()

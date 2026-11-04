@@ -27,6 +27,9 @@ namespace OpponentMemory
 		private TextBlock _versionText = null!;
 		private CancellationTokenSource? _updateCancellation;
 		private bool _windowClosed;
+		private CheckBox _tavernTier = null!;
+		private ComboBox _tierStyle = null!;
+		private Slider _infoSize = null!, _infoSpacing = null!;
 
 		public SettingsWindow(OpponentMemorySettings settings, Action apply, Version installedVersion)
 		{
@@ -57,6 +60,7 @@ namespace OpponentMemory
 			tabs.Items.Add(new TabItem { Header = "General", Content = BuildGeneralTab() });
 			tabs.Items.Add(new TabItem { Header = "Visual", Content = BuildVisualTab() });
 			tabs.Items.Add(new TabItem { Header = "Colors", Content = BuildColorsTab() });
+			tabs.Items.Add(new TabItem { Header = "Opponent info", Content = BuildOpponentInfoTab() });
 			UpdateColorControls();
 			Grid.SetRow(tabs, 0); root.Children.Add(tabs);
 			var bottom = new DockPanel { Margin = new Thickness(0, 12, 0, 0) };
@@ -249,8 +253,25 @@ namespace OpponentMemory
 			return new ScrollViewer { Content = panel };
 		}
 
+		private UIElement BuildOpponentInfoTab()
+		{
+			var panel = NewPanel();
+			_tavernTier = AddCheck(panel, "Show opponent tavern tier", _draft.ShowOpponentTavernTier);
+			AddLabel(panel, "Tier display style");
+			_tierStyle = new ComboBox { ItemsSource = Enum.GetValues(typeof(TavernTierStyle)), SelectedItem = _draft.TierStyle, Margin = new Thickness(0, 0, 0, 12) };
+			panel.Children.Add(_tierStyle);
+			_infoSize = AddSlider(panel, "Tier badge size", 16, 48, 1, _draft.OpponentInfoSize);
+			_infoSpacing = AddSlider(panel, "Space before combat damage", 0, 30, 1, _draft.OpponentInfoSpacing);
+			panel.Children.Add(new TextBlock { Text = "Choose dice with dots (Dice), dice with a number (DiceNumber), a shield with stars, or a hexagon with a number. With encounter counts hidden, tier badges replace the counters and damage stays on the opposite side. Dice are black; other badges use the normal text color. Last-opponent colors apply to all styles; a gold border marks the next opponent. Unknown tiers stay hidden.", TextWrapping = TextWrapping.Wrap, Opacity = .7, Margin = new Thickness(0, 8, 0, 16) });
+			return new ScrollViewer { Content = panel };
+		}
+
 		private void ApplyDraft()
 		{
+			_draft.ShowOpponentTavernTier = _tavernTier.IsChecked == true;
+			_draft.TierStyle = _tierStyle.SelectedItem is TavernTierStyle style ? style : TavernTierStyle.Dice;
+			_draft.OpponentInfoSize = _infoSize.Value;
+			_draft.OpponentInfoSpacing = _infoSpacing.Value;
 			_draft.Enabled = _enabled.IsChecked == true;
 			_draft.CounterSide = _side.SelectedItem is CounterSide side ? side : CounterSide.Right;
 			_draft.ShowEncounterCounts = _counts.IsChecked == true; _draft.ShowLastCombatDamage = _damage.IsChecked == true; _draft.HighlightLastOpponent = _highlight.IsChecked == true;
@@ -264,6 +285,10 @@ namespace OpponentMemory
 
 		private void Populate()
 		{
+			_tavernTier.IsChecked = _draft.ShowOpponentTavernTier;
+			_tierStyle.SelectedItem = _draft.TierStyle;
+			_infoSize.Value = _draft.OpponentInfoSize;
+			_infoSpacing.Value = _draft.OpponentInfoSpacing;
 			_enabled.IsChecked = _draft.Enabled; _side.SelectedItem = _draft.CounterSide; _counts.IsChecked = _draft.ShowEncounterCounts; _damage.IsChecked = _draft.ShowLastCombatDamage; _highlight.IsChecked = _draft.HighlightLastOpponent; _resultColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _resultColorsInColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _zeros.IsChecked = _draft.ShowZeroValues; _ghosts.IsChecked = _draft.CountGhostEncounters; _hideWhenUnfocused.IsChecked = _draft.HideOverlayWhenHearthstoneIsNotFocused;
 			_textStyle.SelectedItem = TextStyleName(_draft.TextStyle); _horizontal.Value = _draft.HorizontalOffset; _perRowHorizontal.Value = _draft.PerRowHorizontalOffset; _vertical.Value = _draft.VerticalOffset; _nextOffset.Value = _draft.NextOpponentExtraOffset; _scale.Value = _draft.Scale * 100; _fontSize.Value = _draft.FontSize; _textOpacity.Value = _draft.TextOpacity; _backgroundOpacity.Value = _draft.BackgroundOpacity;
 			_font.Text = _draft.FontFamily; _bold.IsChecked = _draft.BoldText; SelectColor(_normal, _draft.NormalTextColor); SelectColor(_last, _draft.LastOpponentTextColor); SelectColor(_win, _draft.WinTextColor); SelectColor(_loss, _draft.LossTextColor); SelectColor(_draw, _draft.DrawTextColor); SelectColor(_background, _draft.BackgroundColor); UpdateColorControls();

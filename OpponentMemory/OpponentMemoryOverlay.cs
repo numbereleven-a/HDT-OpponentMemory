@@ -14,6 +14,7 @@ namespace OpponentMemory
 		private readonly Canvas _canvas = new Canvas { IsHitTestVisible = false, Visibility = Visibility.Collapsed };
 		private readonly Dictionary<int, OverlayLabel> _countRows = new Dictionary<int, OverlayLabel>();
 		private readonly Dictionary<int, OverlayLabel> _damageRows = new Dictionary<int, OverlayLabel>();
+		private readonly Dictionary<int, TavernTierBadge> _tierRows = new Dictionary<int, TavernTierBadge>();
 		private string? _styleKey;
 		private FontFamily _fontFamily = new FontFamily("Segoe UI");
 		private Brush _normalBrush = Brushes.Green;
@@ -38,6 +39,7 @@ namespace OpponentMemory
 			_canvas.Children.Clear();
 			_countRows.Clear();
 			_damageRows.Clear();
+			_tierRows.Clear();
 			_canvas.Visibility = Visibility.Collapsed;
 			_attached = false;
 		}
@@ -78,10 +80,12 @@ namespace OpponentMemory
 				var rowIndex = player.LeaderboardPlace - 1;
 				var isLastOpponent = player.PlayerId == tracker.LastCompletedOpponentPlayerId;
 				var isScheduledOpponent = player.PlayerId == scheduledOpponentId;
+				var tierVisible = !player.IsLocalPlayer && settings.ShowOpponentTavernTier && player.TavernTier.HasValue;
+				var replaceCounts = !settings.ShowEncounterCounts && tierVisible;
 
 				var countRow = GetRow(_countRows, player.PlayerId);
 				var count = tracker.GetCount(player.PlayerId);
-				var showMarker = !settings.ShowEncounterCounts && settings.HighlightLastOpponent && isLastOpponent;
+				var showMarker = !settings.ShowEncounterCounts && !replaceCounts && settings.HighlightLastOpponent && isLastOpponent;
 				var showCount = settings.ShowEncounterCounts && (settings.ShowZeroValues || count != 0);
 				var countVisible = !player.IsLocalPlayer && (showCount || showMarker);
 				countRow.Visibility = countVisible ? Visibility.Visible : Visibility.Collapsed;
@@ -89,6 +93,27 @@ namespace OpponentMemory
 				{
 					ConfigureRow(countRow, showMarker ? "●" : count.ToString(), settings, settings.HighlightLastOpponent && isLastOpponent ? GetLastOpponentBrush(settings, lastCombatOutcome) : _normalBrush);
 					PositionRow(countRow, settings.CounterSide, portraitLeft, tileHeight, rowIndex, isScheduledOpponent, settings);
+				}
+
+				var infoSide = replaceCounts ? settings.CounterSide : settings.CounterSide == CounterSide.Left ? CounterSide.Right : CounterSide.Left;
+				if(!_tierRows.TryGetValue(player.PlayerId, out var tierRow))
+				{
+					tierRow = new TavernTierBadge();
+					_tierRows.Add(player.PlayerId, tierRow);
+					_canvas.Children.Add(tierRow);
+				}
+				tierRow.Visibility = tierVisible ? Visibility.Visible : Visibility.Collapsed;
+				if(tierVisible)
+				{
+					var size = settings.OpponentInfoSize * settings.Scale;
+					var color = settings.HighlightLastOpponent && isLastOpponent ? GetLastOpponentBrush(settings, lastCombatOutcome)
+						: settings.TierStyle == TavernTierStyle.Dice || settings.TierStyle == TavernTierStyle.DiceNumber ? Brushes.Black : _normalBrush;
+					tierRow.Configure(player.TavernTier!.Value, size, settings.TextOpacity / 100d, color, isScheduledOpponent, settings.TierStyle);
+					var left = infoSide == CounterSide.Left ? portraitLeft - settings.HorizontalOffset - size : portraitLeft + tileHeight + settings.HorizontalOffset;
+					left += rowIndex * settings.PerRowHorizontalOffset;
+					if(infoSide == CounterSide.Right && isScheduledOpponent) left += settings.NextOpponentExtraOffset;
+					Canvas.SetLeft(tierRow, left);
+					Canvas.SetTop(tierRow, settings.VerticalOffset + tileHeight * rowIndex + (tileHeight - size) / 2 + height * .15);
 				}
 
 				var damageRow = GetRow(_damageRows, player.PlayerId);
@@ -103,11 +128,15 @@ namespace OpponentMemory
 					ConfigureRow(damageRow, lastCombatDamage.GetValueOrDefault().ToString(), settings, GetCombatOutcomeBrush(lastCombatOutcome));
 					var damageSide = settings.CounterSide == CounterSide.Left ? CounterSide.Right : CounterSide.Left;
 					PositionRow(damageRow, damageSide, portraitLeft, tileHeight, rowIndex, isScheduledOpponent, settings);
+					if(tierVisible && !replaceCounts)
+						Canvas.SetLeft(damageRow, Canvas.GetLeft(damageRow) + (damageSide == CounterSide.Left ? -1 : 1) * (settings.OpponentInfoSize + settings.OpponentInfoSpacing) * settings.Scale);
 				}
 			}
 
 			HideUnused(_countRows, activeIds);
 			HideUnused(_damageRows, activeIds);
+			foreach(var pair in _tierRows)
+				if(!activeIds.Contains(pair.Key)) pair.Value.Visibility = Visibility.Collapsed;
 			_canvas.Visibility = Visibility.Visible;
 		}
 

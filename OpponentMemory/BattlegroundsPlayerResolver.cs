@@ -95,7 +95,7 @@ namespace OpponentMemory
 				.GroupBy(x => x.PlayerId)
 				.Select(group => group.First())
 				.OrderBy(x => x.Place)
-				.Select(x => new LeaderboardPlayer(x.PlayerId, x.Place, x.PlayerId == localPlayerId, x.Entity.Health <= 0))
+				.Select(x => new LeaderboardPlayer(x.PlayerId, x.Place, x.PlayerId == localPlayerId, x.Entity.Health <= 0, x.Entity.GetTag(GameTag.PLAYER_TECH_LEVEL)))
 				.ToArray();
 		}
 
@@ -133,16 +133,18 @@ namespace OpponentMemory
 
 	public sealed class LeaderboardPlayer
 	{
-		public LeaderboardPlayer(int playerId, int leaderboardPlace, bool isLocalPlayer, bool isDead)
+		public LeaderboardPlayer(int playerId, int leaderboardPlace, bool isLocalPlayer, bool isDead, int tavernTier = 0)
 		{
 			PlayerId = playerId;
 			LeaderboardPlace = leaderboardPlace;
 			IsLocalPlayer = isLocalPlayer;
 			IsDead = isDead;
+			TavernTier = tavernTier > 0 ? tavernTier : (int?)null;
 		}
 		public int PlayerId { get; }
 		public int LeaderboardPlace { get; }
 		public bool IsLocalPlayer { get; }
 		public bool IsDead { get; }
+		public int? TavernTier { get; }
 	}
 }

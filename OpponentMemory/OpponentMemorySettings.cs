@@ -7,13 +7,14 @@ namespace OpponentMemory
 {
 	public enum CounterSide { Left, Right }
 	public enum OverlayTextStyle { Classic, Outlined, Badge }
+	public enum TavernTierStyle { Dice, Shield, Hexagon, DiceNumber }
 
 	public sealed class OpponentMemorySettings
 	{
 		private static readonly XmlSerializer Serializer = new XmlSerializer(typeof(OpponentMemorySettings));
 		private static readonly object SaveSync = new object();
 		public bool Enabled { get; set; } = true;
-		public CounterSide CounterSide { get; set; } = CounterSide.Right;
+		public CounterSide CounterSide { get; set; } = CounterSide.Left;
 		public double HorizontalOffset { get; set; } = 8;
 		public double PerRowHorizontalOffset { get; set; } = -2;
 		public double VerticalOffset { get; set; }
@@ -21,8 +22,12 @@ namespace OpponentMemory
 		public double Scale { get; set; } = 1;
 		public OverlayTextStyle TextStyle { get; set; } = OverlayTextStyle.Outlined;
 		public bool ShowZeroValues { get; set; } = true;
-		public bool ShowEncounterCounts { get; set; } = true;
-		public bool ShowLastCombatDamage { get; set; }
+		public bool ShowEncounterCounts { get; set; }
+		public bool ShowLastCombatDamage { get; set; } = true;
+		public bool ShowOpponentTavernTier { get; set; } = true;
+		public double OpponentInfoSize { get; set; } = 26;
+		public TavernTierStyle TierStyle { get; set; } = TavernTierStyle.Dice;
+		public double OpponentInfoSpacing { get; set; } = 6;
 		public bool HighlightLastOpponent { get; set; } = true;
 		public bool ColorLastOpponentByCombatResult { get; set; }
 		public bool CountGhostEncounters { get; set; } = true;
@@ -41,6 +46,9 @@ namespace OpponentMemory
 
 		public void Normalize()
 		{
+			if(!Enum.IsDefined(typeof(TavernTierStyle), TierStyle)) TierStyle = TavernTierStyle.Dice;
+			OpponentInfoSize = Clamp(OpponentInfoSize, 16, 48, 26);
+			OpponentInfoSpacing = Clamp(OpponentInfoSpacing, 0, 30, 6);
 			HorizontalOffset = Clamp(HorizontalOffset, -300, 300, 8);
 			PerRowHorizontalOffset = Clamp(PerRowHorizontalOffset, -20, 20, -2);
 			VerticalOffset = Clamp(VerticalOffset, -200, 200, 0);
@@ -61,6 +69,10 @@ namespace OpponentMemory
 
 		public void CopyFrom(OpponentMemorySettings source)
 		{
+			TierStyle = source.TierStyle;
+			ShowOpponentTavernTier = source.ShowOpponentTavernTier;
+			OpponentInfoSize = source.OpponentInfoSize;
+			OpponentInfoSpacing = source.OpponentInfoSpacing;
 			Enabled = source.Enabled;
 			CounterSide = source.CounterSide;
 			HorizontalOffset = source.HorizontalOffset;
