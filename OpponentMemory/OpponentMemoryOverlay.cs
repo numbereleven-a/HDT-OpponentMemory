@@ -18,6 +18,7 @@ namespace OpponentMemory
 		private string? _styleKey;
 		private FontFamily _fontFamily = new FontFamily("Segoe UI");
 		private Brush _normalBrush = Brushes.Green;
+		private Brush _tierBackgroundBrush = Brushes.Purple;
 		private Brush _lastBrush = Brushes.Red;
 		private Brush _winBrush = Brushes.Blue;
 		private Brush _lossBrush = Brushes.Red;
@@ -107,7 +108,7 @@ namespace OpponentMemory
 				{
 					var size = settings.OpponentInfoSize * settings.Scale;
 					var color = settings.HighlightLastOpponent && isLastOpponent ? GetLastOpponentBrush(settings, lastCombatOutcome)
-						: settings.TierStyle == TavernTierStyle.Dice || settings.TierStyle == TavernTierStyle.DiceNumber ? Brushes.Black : _normalBrush;
+						: settings.TierStyle == TavernTierStyle.Dice || settings.TierStyle == TavernTierStyle.DiceNumber ? Brushes.Black : _tierBackgroundBrush;
 					tierRow.Configure(player.TavernTier!.Value, size, settings.TextOpacity / 100d, color, isScheduledOpponent, settings.TierStyle);
 					var left = infoSide == CounterSide.Left ? portraitLeft - settings.HorizontalOffset - size : portraitLeft + tileHeight + settings.HorizontalOffset;
 					left += rowIndex * settings.PerRowHorizontalOffset;
@@ -169,10 +170,11 @@ namespace OpponentMemory
 
 		private void UpdateStyleCache(OpponentMemorySettings settings)
 		{
-			var styleKey = string.Join("|", settings.FontFamily, settings.NormalTextColor, settings.LastOpponentTextColor, settings.WinTextColor, settings.LossTextColor, settings.DrawTextColor, settings.BackgroundColor, settings.TextOpacity, settings.BackgroundOpacity);
+			var styleKey = string.Join("|", settings.FontFamily, settings.NormalTextColor, settings.LastOpponentTextColor, settings.WinTextColor, settings.LossTextColor, settings.DrawTextColor, settings.BackgroundColor, settings.TextOpacity, settings.BackgroundOpacity, settings.TierBackgroundColor);
 			if(string.Equals(styleKey, _styleKey, StringComparison.Ordinal))
 				return;
 			_styleKey = styleKey;
+			_tierBackgroundBrush = GetBrush(settings.TierBackgroundColor, Color.FromRgb(104, 35, 111), 1);
 			_fontFamily = new FontFamily(settings.FontFamily);
 			_normalBrush = GetBrush(settings.NormalTextColor, Colors.Green, settings.TextOpacity / 100d);
 			_lastBrush = GetBrush(settings.LastOpponentTextColor, Colors.Red, settings.TextOpacity / 100d);

@@ -26,7 +26,8 @@ namespace OpponentMemory
 		public bool ShowLastCombatDamage { get; set; } = true;
 		public bool ShowOpponentTavernTier { get; set; } = true;
 		public double OpponentInfoSize { get; set; } = 26;
-		public TavernTierStyle TierStyle { get; set; } = TavernTierStyle.Dice;
+		public TavernTierStyle TierStyle { get; set; } = TavernTierStyle.Shield;
+		public string TierBackgroundColor { get; set; } = "#68236F";
 		public double OpponentInfoSpacing { get; set; } = 6;
 		public bool HighlightLastOpponent { get; set; } = true;
 		public bool ColorLastOpponentByCombatResult { get; set; }
@@ -46,7 +47,8 @@ namespace OpponentMemory
 
 		public void Normalize()
 		{
-			if(!Enum.IsDefined(typeof(TavernTierStyle), TierStyle)) TierStyle = TavernTierStyle.Dice;
+			if(string.IsNullOrWhiteSpace(TierBackgroundColor)) TierBackgroundColor = "#68236F";
+			if(!Enum.IsDefined(typeof(TavernTierStyle), TierStyle)) TierStyle = TavernTierStyle.Shield;
 			OpponentInfoSize = Clamp(OpponentInfoSize, 16, 48, 26);
 			OpponentInfoSpacing = Clamp(OpponentInfoSpacing, 0, 30, 6);
 			HorizontalOffset = Clamp(HorizontalOffset, -300, 300, 8);
@@ -69,6 +71,7 @@ namespace OpponentMemory
 
 		public void CopyFrom(OpponentMemorySettings source)
 		{
+			TierBackgroundColor = source.TierBackgroundColor;
 			TierStyle = source.TierStyle;
 			ShowOpponentTavernTier = source.ShowOpponentTavernTier;
 			OpponentInfoSize = source.OpponentInfoSize;

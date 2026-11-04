@@ -29,6 +29,7 @@ namespace OpponentMemory
 		private bool _windowClosed;
 		private CheckBox _tavernTier = null!;
 		private ComboBox _tierStyle = null!;
+		private ComboBox _tierBackground = null!;
 		private Slider _infoSize = null!, _infoSpacing = null!;
 
 		public SettingsWindow(OpponentMemorySettings settings, Action apply, Version installedVersion)
@@ -260,16 +261,18 @@ namespace OpponentMemory
 			AddLabel(panel, "Tier display style");
 			_tierStyle = new ComboBox { ItemsSource = Enum.GetValues(typeof(TavernTierStyle)), SelectedItem = _draft.TierStyle, Margin = new Thickness(0, 0, 0, 12) };
 			panel.Children.Add(_tierStyle);
+			_tierBackground = AddColorPicker(panel, "Shield and hexagon background color", _draft.TierBackgroundColor);
 			_infoSize = AddSlider(panel, "Tier badge size", 16, 48, 1, _draft.OpponentInfoSize);
 			_infoSpacing = AddSlider(panel, "Space before combat damage", 0, 30, 1, _draft.OpponentInfoSpacing);
-			panel.Children.Add(new TextBlock { Text = "Choose dice with dots (Dice), dice with a number (DiceNumber), a shield with stars, or a hexagon with a number. With encounter counts hidden, tier badges replace the counters and damage stays on the opposite side. Dice are black; other badges use the normal text color. Last-opponent colors apply to all styles; a gold border marks the next opponent. Unknown tiers stay hidden.", TextWrapping = TextWrapping.Wrap, Opacity = .7, Margin = new Thickness(0, 8, 0, 16) });
+			panel.Children.Add(new TextBlock { Text = "Choose dice with dots (Dice), dice with a number (DiceNumber), a shield with stars, or a hexagon with a number. With encounter counts hidden, tier badges replace the counters and damage stays on the opposite side. Dice are black; shields and hexagons use their own background color. Last-opponent colors apply to all styles; a gold border marks the next opponent. Unknown tiers stay hidden.", TextWrapping = TextWrapping.Wrap, Opacity = .7, Margin = new Thickness(0, 8, 0, 16) });
 			return new ScrollViewer { Content = panel };
 		}
 
 		private void ApplyDraft()
 		{
 			_draft.ShowOpponentTavernTier = _tavernTier.IsChecked == true;
-			_draft.TierStyle = _tierStyle.SelectedItem is TavernTierStyle style ? style : TavernTierStyle.Dice;
+			_draft.TierStyle = _tierStyle.SelectedItem is TavernTierStyle style ? style : TavernTierStyle.Shield;
+			_draft.TierBackgroundColor = ColorValue(_tierBackground);
 			_draft.OpponentInfoSize = _infoSize.Value;
 			_draft.OpponentInfoSpacing = _infoSpacing.Value;
 			_draft.Enabled = _enabled.IsChecked == true;
@@ -287,6 +290,7 @@ namespace OpponentMemory
 		{
 			_tavernTier.IsChecked = _draft.ShowOpponentTavernTier;
 			_tierStyle.SelectedItem = _draft.TierStyle;
+			SelectColor(_tierBackground, _draft.TierBackgroundColor);
 			_infoSize.Value = _draft.OpponentInfoSize;
 			_infoSpacing.Value = _draft.OpponentInfoSpacing;
 			_enabled.IsChecked = _draft.Enabled; _side.SelectedItem = _draft.CounterSide; _counts.IsChecked = _draft.ShowEncounterCounts; _damage.IsChecked = _draft.ShowLastCombatDamage; _highlight.IsChecked = _draft.HighlightLastOpponent; _resultColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _resultColorsInColors.IsChecked = _draft.ColorLastOpponentByCombatResult; _zeros.IsChecked = _draft.ShowZeroValues; _ghosts.IsChecked = _draft.CountGhostEncounters; _hideWhenUnfocused.IsChecked = _draft.HideOverlayWhenHearthstoneIsNotFocused;
