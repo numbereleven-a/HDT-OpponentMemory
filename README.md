@@ -10,7 +10,7 @@ For the Windows version of HDT. Solo Battlegrounds only.
 
 ### In game
 
-![Tavern tiers displayed as dice, with the previous opponent highlighted and last combat damage on the opposite side](images/screenshot_tavern_tiers.png)
+![Tavern tiers displayed beside leaderboard portraits, with the previous opponent highlighted and last combat damage on the opposite side](images/screenshot_tavern_tiers.png)
 
 ### General settings
 
@@ -38,7 +38,7 @@ For the Windows version of HDT. Solo Battlegrounds only.
 
 ### Tavern tiers
 
-By default, black dice with white dots show opponent tavern tiers on the left of the portraits. Seven dots represent tier 7. You can choose a number instead of dots, a shield with stars, or a hexagon with a number.
+By default, purple shields with gold stars show opponent tavern tiers on the left of the portraits. Seven stars or dots represent tier 7. You can choose dice with dots, dice with a number, or a hexagon with a number instead.
 
 Tiers refresh as HDT receives new values, including during shopping. Unknown values stay hidden. The plugin does not predict upgrades or reveal changes before HDT receives them.
 
@@ -46,7 +46,7 @@ Tiers refresh as HDT receives new values, including during shopping. Unknown val
 
 The most recent opponent uses the selected last-opponent color. Enable **Color last opponent by combat result** to use your win, loss, and draw colors instead. A gold badge border marks the next opponent. If the same player is both your previous and next opponent, the badge keeps the previous-opponent fill and the gold border.
 
-Normal dice are black. Shields and hexagons use the normal text color. The color and next-opponent border apply to all four styles.
+Normal dice are black. Shields and hexagons use the configured tier background color (purple by default). The last-opponent color and next-opponent gold border apply to all four styles.
 
 ### Last combat damage
 
@@ -69,9 +69,9 @@ Open `Options -> Tracker -> Plugins -> Opponent Memory -> Settings`.
 * **General:** encounter counts, last combat damage, highlighting, placement side, ghost encounters, and hiding the overlay when Hearthstone is not in focus
 * **Visual:** positioning, per-row alignment, scale, font, text style, and opacity
 * **Colors:** normal text, last-opponent, combat-result, and background colors
-* **Opponent info:** tavern tier visibility, badge style, size, and spacing before damage
+* **Opponent info:** tavern tier visibility, badge style, shield and hexagon background color, size, and spacing before damage
 
-The default layout uses dice on the left, hidden encounter counts, and last combat damage on the right. Existing settings are preserved when upgrading; use **Reset settings**, then **Apply**, to use the new defaults.
+The default layout uses shields on the left, hidden encounter counts, and last combat damage on the right. Existing settings are preserved when upgrading; use **Reset settings**, then **Apply**, to use the new defaults.
 
 Use the `↻` button beside the installed version to check for updates. Checks run only when pressed and do not download or install files automatically.
 

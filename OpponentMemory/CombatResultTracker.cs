@@ -49,8 +49,9 @@ namespace OpponentMemory
 		public static bool HasCombatCompletionEvidence(
 			int playerTurnStartGenerationAtCombatStart,
 			int currentPlayerTurnStartGeneration,
-			bool stateRestoredDuringCombat)
-			=> stateRestoredDuringCombat || playerTurnStartGenerationAtCombatStart != currentPlayerTurnStartGeneration;
+			bool stateRestoredDuringCombat,
+			bool roundAdvanced = false)
+			=> stateRestoredDuringCombat || roundAdvanced || playerTurnStartGenerationAtCombatStart != currentPlayerTurnStartGeneration;
 
 		public void StartCombat(int localPlayerId, int opponentPlayerId, int? localDurability, int? opponentDurability, bool opponentWasGhost)
 		{

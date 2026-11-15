@@ -65,6 +65,7 @@ namespace OpponentMemory.Tests
 			MissingRestoredDataDoesNotBecomeADraw();
 			InterruptedStateDoesNotLeakIntoTheNextCombat();
 			CombatCompletionRequiresPositiveEvidence();
+			RoundAdvanceCompletesInterruptedCombatWithoutMenuOrTurnStart();
 			UnconfirmedCombatTransitionIsAbandoned();
 			AbandonedCombatDoesNotMoveEncounterData();
 			ReleaseVersionsAreNormalized();
@@ -217,9 +218,9 @@ namespace OpponentMemory.Tests
 
 		private static void SettingsAreClamped()
 		{
-			var settings = new OpponentMemorySettings { Scale = 9, TextOpacity = -1, FontSize = double.NaN, TextStyle = (OverlayTextStyle)99 }; settings.Normalize();
-			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); Equal(OverlayTextStyle.Outlined, settings.TextStyle, "outlined text is the default fallback"); False(settings.ShowEncounterCounts, "counts hidden by default"); True(settings.ShowLastCombatDamage, "damage visible by default"); Equal(CounterSide.Left, settings.CounterSide, "tier badges default to the left"); Equal(TavernTierStyle.Shield, settings.TierStyle, "shields are the default tier style"); True(settings.HighlightLastOpponent, "highlight visible by default"); False(settings.ColorLastOpponentByCombatResult, "result coloring is opt-in"); True(settings.HideOverlayWhenHearthstoneIsNotFocused, "overlay hides outside Hearthstone by default"); Equal("Blue", settings.WinTextColor, "default win color"); Equal("Red", settings.LossTextColor, "default loss color"); Equal("Yellow", settings.DrawTextColor, "default draw color");
-			var copy = new OpponentMemorySettings(); copy.CopyFrom(new OpponentMemorySettings { HideOverlayWhenHearthstoneIsNotFocused = false }); False(copy.HideOverlayWhenHearthstoneIsNotFocused, "focus setting is copied");
+			var settings = new OpponentMemorySettings { Scale = 9, TextOpacity = -1, FontSize = double.NaN, TextStyle = (OverlayTextStyle)99, TierBackgroundColor = "  " }; settings.Normalize();
+			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); Equal(OverlayTextStyle.Outlined, settings.TextStyle, "outlined text is the default fallback"); Equal("#68236F", settings.TierBackgroundColor, "tier background defaults to purple"); False(settings.ShowEncounterCounts, "counts hidden by default"); True(settings.ShowLastCombatDamage, "damage visible by default"); Equal(CounterSide.Left, settings.CounterSide, "tier badges default to the left"); Equal(TavernTierStyle.Shield, settings.TierStyle, "shields are the default tier style"); True(settings.HighlightLastOpponent, "highlight visible by default"); False(settings.ColorLastOpponentByCombatResult, "result coloring is opt-in"); True(settings.HideOverlayWhenHearthstoneIsNotFocused, "overlay hides outside Hearthstone by default"); Equal("Blue", settings.WinTextColor, "default win color"); Equal("Red", settings.LossTextColor, "default loss color"); Equal("Yellow", settings.DrawTextColor, "default draw color");
+			var copy = new OpponentMemorySettings(); copy.CopyFrom(new OpponentMemorySettings { HideOverlayWhenHearthstoneIsNotFocused = false, TierBackgroundColor = "#112233" }); False(copy.HideOverlayWhenHearthstoneIsNotFocused, "focus setting is copied"); Equal("#112233", copy.TierBackgroundColor, "tier background color is copied");
 		}
 
 		private static void OpponentInfoPreservesUnknownAndSeventhTier()
@@ -560,6 +561,24 @@ namespace OpponentMemory.Tests
 			False(CombatResultTracker.HasCombatCompletionEvidence(5, 5, false), "a phase flag change alone does not complete combat");
 			True(CombatResultTracker.HasCombatCompletionEvidence(5, 6, false), "a new shopping turn confirms combat completion");
 			True(CombatResultTracker.HasCombatCompletionEvidence(5, 5, true), "state restoration can confirm a missed combat boundary");
+			True(CombatResultTracker.HasCombatCompletionEvidence(5, 5, false, roundAdvanced: true), "an advanced round confirms the previous combat ended");
+		}
+
+		private static void RoundAdvanceCompletesInterruptedCombatWithoutMenuOrTurnStart()
+		{
+			var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+			var gate = new CombatCompletionGate();
+			var tracker = new EncounterTracker();
+			tracker.Schedule(5, 2);
+			True(tracker.StartCombat(5), "round 5 combat starts");
+			gate.Begin(true);
+			var evidence = CombatResultTracker.HasCombatCompletionEvidence(10, 10, false, roundAdvanced: true);
+			True(evidence, "advancing directly to a later combat round provides completion evidence");
+			False(gate.CanFinalize(now, true, evidence, true), "finalization still waits for result delay");
+			True(gate.CanFinalize(now.AddMilliseconds(100), true, evidence, true), "previous combat finalizes without an intervening menu or turn-start event");
+			True(tracker.CompleteCombat(true), "previous round is counted once");
+			tracker.Schedule(6, 3);
+			True(tracker.StartCombat(6), "next combat round can start after previous combat finalizes");
 		}
 
 		private static void UnconfirmedCombatTransitionIsAbandoned()

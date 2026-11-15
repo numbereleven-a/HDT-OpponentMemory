@@ -276,7 +276,7 @@ namespace OpponentMemory
 			_draft.OpponentInfoSize = _infoSize.Value;
 			_draft.OpponentInfoSpacing = _infoSpacing.Value;
 			_draft.Enabled = _enabled.IsChecked == true;
-			_draft.CounterSide = _side.SelectedItem is CounterSide side ? side : CounterSide.Right;
+			_draft.CounterSide = _side.SelectedItem is CounterSide side ? side : CounterSide.Left;
 			_draft.ShowEncounterCounts = _counts.IsChecked == true; _draft.ShowLastCombatDamage = _damage.IsChecked == true; _draft.HighlightLastOpponent = _highlight.IsChecked == true;
 			_draft.ColorLastOpponentByCombatResult = _resultColors.IsChecked == true;
 			_draft.ShowZeroValues = _zeros.IsChecked == true; _draft.CountGhostEncounters = _ghosts.IsChecked == true; _draft.HideOverlayWhenHearthstoneIsNotFocused = _hideWhenUnfocused.IsChecked == true;

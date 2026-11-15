@@ -20,9 +20,13 @@ namespace OpponentMemory
 		private Brush _normalBrush = Brushes.Green;
 		private Brush _tierBackgroundBrush = Brushes.Purple;
 		private Brush _lastBrush = Brushes.Red;
+		private Brush _tierLastBrush = Brushes.Red;
 		private Brush _winBrush = Brushes.Blue;
+		private Brush _tierWinBrush = Brushes.Blue;
 		private Brush _lossBrush = Brushes.Red;
+		private Brush _tierLossBrush = Brushes.Red;
 		private Brush _drawBrush = Brushes.Yellow;
+		private Brush _tierDrawBrush = Brushes.Yellow;
 		private Brush _backgroundBrush = Brushes.Transparent;
 		private bool _attached;
 
@@ -107,7 +111,7 @@ namespace OpponentMemory
 				if(tierVisible)
 				{
 					var size = settings.OpponentInfoSize * settings.Scale;
-					var color = settings.HighlightLastOpponent && isLastOpponent ? GetLastOpponentBrush(settings, lastCombatOutcome)
+					var color = settings.HighlightLastOpponent && isLastOpponent ? GetLastOpponentBrush(settings, lastCombatOutcome, opaque: true)
 						: settings.TierStyle == TavernTierStyle.Dice || settings.TierStyle == TavernTierStyle.DiceNumber ? Brushes.Black : _tierBackgroundBrush;
 					tierRow.Configure(player.TavernTier!.Value, size, settings.TextOpacity / 100d, color, isScheduledOpponent, settings.TierStyle);
 					var left = infoSide == CounterSide.Left ? portraitLeft - settings.HorizontalOffset - size : portraitLeft + tileHeight + settings.HorizontalOffset;
@@ -136,8 +140,7 @@ namespace OpponentMemory
 
 			HideUnused(_countRows, activeIds);
 			HideUnused(_damageRows, activeIds);
-			foreach(var pair in _tierRows)
-				if(!activeIds.Contains(pair.Key)) pair.Value.Visibility = Visibility.Collapsed;
+			HideUnused(_tierRows, activeIds);
 			_canvas.Visibility = Visibility.Visible;
 		}
 
@@ -156,7 +159,7 @@ namespace OpponentMemory
 
 		private static void PositionRow(OverlayLabel row, CounterSide side, double portraitLeft, double tileHeight, int rowIndex, bool isScheduledOpponent, OpponentMemorySettings settings)
 		{
-			var top = settings.VerticalOffset + tileHeight * rowIndex + (tileHeight - row.FontSize) / 2d;
+			var top = settings.VerticalOffset + tileHeight * rowIndex + (tileHeight - row.DesiredSize.Height) / 2d;
 			top += HdtApi.OverlayCanvas.ActualHeight * .15;
 			var left = side == CounterSide.Left
 				? portraitLeft - settings.HorizontalOffset - row.DesiredSize.Width
@@ -174,27 +177,32 @@ namespace OpponentMemory
 			if(string.Equals(styleKey, _styleKey, StringComparison.Ordinal))
 				return;
 			_styleKey = styleKey;
+			var textOpacity = settings.TextOpacity / 100d;
 			_tierBackgroundBrush = GetBrush(settings.TierBackgroundColor, Color.FromRgb(104, 35, 111), 1);
 			_fontFamily = new FontFamily(settings.FontFamily);
-			_normalBrush = GetBrush(settings.NormalTextColor, Colors.Green, settings.TextOpacity / 100d);
-			_lastBrush = GetBrush(settings.LastOpponentTextColor, Colors.Red, settings.TextOpacity / 100d);
-			_winBrush = GetBrush(settings.WinTextColor, Colors.Blue, settings.TextOpacity / 100d);
-			_lossBrush = GetBrush(settings.LossTextColor, Colors.Red, settings.TextOpacity / 100d);
-			_drawBrush = GetBrush(settings.DrawTextColor, Colors.Yellow, settings.TextOpacity / 100d);
+			_normalBrush = GetBrush(settings.NormalTextColor, Colors.Green, textOpacity);
+			_lastBrush = GetBrush(settings.LastOpponentTextColor, Colors.Red, textOpacity);
+			_tierLastBrush = GetOpaqueBrush(_lastBrush);
+			_winBrush = GetBrush(settings.WinTextColor, Colors.Blue, textOpacity);
+			_tierWinBrush = GetOpaqueBrush(_winBrush);
+			_lossBrush = GetBrush(settings.LossTextColor, Colors.Red, textOpacity);
+			_tierLossBrush = GetOpaqueBrush(_lossBrush);
+			_drawBrush = GetBrush(settings.DrawTextColor, Colors.Yellow, textOpacity);
+			_tierDrawBrush = GetOpaqueBrush(_drawBrush);
 			_backgroundBrush = GetBrush(settings.BackgroundColor, Colors.Transparent, settings.BackgroundOpacity / 100d);
 		}
 
-		private Brush GetLastOpponentBrush(OpponentMemorySettings settings, CombatOutcome outcome)
-			=> settings.ColorLastOpponentByCombatResult ? GetCombatOutcomeBrush(outcome) : _lastBrush;
+		private Brush GetLastOpponentBrush(OpponentMemorySettings settings, CombatOutcome outcome, bool opaque = false)
+			=> settings.ColorLastOpponentByCombatResult ? GetCombatOutcomeBrush(outcome, opaque) : (opaque ? _tierLastBrush : _lastBrush);
 
-		private Brush GetCombatOutcomeBrush(CombatOutcome outcome)
+		private Brush GetCombatOutcomeBrush(CombatOutcome outcome, bool opaque = false)
 		{
 			switch(outcome)
 			{
-				case CombatOutcome.Win: return _winBrush;
-				case CombatOutcome.Loss: return _lossBrush;
-				case CombatOutcome.Draw: return _drawBrush;
-				default: return _lastBrush;
+				case CombatOutcome.Win: return opaque ? _tierWinBrush : _winBrush;
+				case CombatOutcome.Loss: return opaque ? _tierLossBrush : _lossBrush;
+				case CombatOutcome.Draw: return opaque ? _tierDrawBrush : _drawBrush;
+				default: return opaque ? _tierLastBrush : _lastBrush;
 			}
 		}
 
@@ -207,10 +215,20 @@ namespace OpponentMemory
 			return row;
 		}
 
-		private static void HideUnused(IEnumerable<KeyValuePair<int, OverlayLabel>> rows, ISet<int> activeIds)
+		private static void HideUnused<TElement>(IEnumerable<KeyValuePair<int, TElement>> rows, ISet<int> activeIds) where TElement : UIElement
 		{
 			foreach(var unused in rows.Where(pair => !activeIds.Contains(pair.Key)).Select(pair => pair.Value))
 				unused.Visibility = Visibility.Collapsed;
+		}
+
+		private static Brush GetOpaqueBrush(Brush brush)
+		{
+			if(brush.Opacity >= .999 || !(brush is SolidColorBrush solid))
+				return brush;
+			var opaque = new SolidColorBrush(solid.Color);
+			if(opaque.CanFreeze)
+				opaque.Freeze();
+			return opaque;
 		}
 
 		private static Brush GetBrush(string value, Color fallback, double opacity)
