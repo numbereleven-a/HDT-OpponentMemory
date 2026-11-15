@@ -40,6 +40,7 @@ namespace OpponentMemory
 		public void Detach()
 		{
 			if(!_attached) return;
+			StopTierPulses();
 			HdtApi.OverlayCanvas.Children.Remove(_canvas);
 			_canvas.Children.Clear();
 			_countRows.Clear();
@@ -49,15 +50,21 @@ namespace OpponentMemory
 			_attached = false;
 		}
 
-		public void Hide() => _canvas.Visibility = Visibility.Collapsed;
+		public void Hide()
+		{
+			StopTierPulses();
+			_canvas.Visibility = Visibility.Collapsed;
+		}
 
 		public void Update(
 			IReadOnlyList<LeaderboardPlayer> players,
 			EncounterTracker tracker,
+			TavernTierPulseTracker pulseTracker,
 			CombatOutcome lastCombatOutcome,
 			int? lastCombatDamage,
 			OpponentMemorySettings settings,
-			int? scheduledOpponentId)
+			int? scheduledOpponentId,
+			DateTime nowUtc)
 		{
 			var overlayCanvas = HdtApi.OverlayCanvas;
 			var width = overlayCanvas.ActualWidth;
@@ -113,13 +120,16 @@ namespace OpponentMemory
 					var size = settings.OpponentInfoSize * settings.Scale;
 					var color = settings.HighlightLastOpponent && isLastOpponent ? GetLastOpponentBrush(settings, lastCombatOutcome, opaque: true)
 						: settings.TierStyle == TavernTierStyle.Dice || settings.TierStyle == TavernTierStyle.DiceNumber ? Brushes.Black : _tierBackgroundBrush;
-					tierRow.Configure(player.TavernTier!.Value, size, settings.TextOpacity / 100d, color, isScheduledOpponent, settings.TierStyle);
+					var isPulsing = settings.PulseOnTavernTierUpgrade && pulseTracker.IsPulsing(player.PlayerId, nowUtc);
+					tierRow.Configure(player.TavernTier!.Value, size, settings.TextOpacity / 100d, color, isScheduledOpponent, settings.TierStyle, isPulsing);
 					var left = infoSide == CounterSide.Left ? portraitLeft - settings.HorizontalOffset - size : portraitLeft + tileHeight + settings.HorizontalOffset;
 					left += rowIndex * settings.PerRowHorizontalOffset;
 					if(infoSide == CounterSide.Right && isScheduledOpponent) left += settings.NextOpponentExtraOffset;
 					Canvas.SetLeft(tierRow, left);
 					Canvas.SetTop(tierRow, settings.VerticalOffset + tileHeight * rowIndex + (tileHeight - size) / 2 + height * .15);
 				}
+				else
+					tierRow.StopPulse();
 
 				var damageRow = GetRow(_damageRows, player.PlayerId);
 				var damageVisible = !player.IsLocalPlayer
@@ -218,7 +228,17 @@ namespace OpponentMemory
 		private static void HideUnused<TElement>(IEnumerable<KeyValuePair<int, TElement>> rows, ISet<int> activeIds) where TElement : UIElement
 		{
 			foreach(var unused in rows.Where(pair => !activeIds.Contains(pair.Key)).Select(pair => pair.Value))
+			{
+				if(unused is TavernTierBadge badge)
+					badge.StopPulse();
 				unused.Visibility = Visibility.Collapsed;
+			}
+		}
+
+		private void StopTierPulses()
+		{
+			foreach(var badge in _tierRows.Values)
+				badge.StopPulse();
 		}
 
 		private static Brush GetOpaqueBrush(Brush brush)

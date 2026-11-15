@@ -25,6 +25,7 @@ namespace OpponentMemory.Tests
 			RestoredStateDoesNotInventHistory();
 			SettingsAreClamped();
 			OpponentInfoPreservesUnknownAndSeventhTier();
+			TavernTierPulseTracksChangesAndStopsAtRoundStart();
 			StandardLeaderboardWaitsForEightPlayers();
 			PartialLeaderboardRequiresStability();
 			MatchIdentityUsesNewStatsHandleAfterMenu();
@@ -218,8 +219,8 @@ namespace OpponentMemory.Tests
 
 		private static void SettingsAreClamped()
 		{
-			var settings = new OpponentMemorySettings { Scale = 9, TextOpacity = -1, FontSize = double.NaN, TextStyle = (OverlayTextStyle)99, TierBackgroundColor = "  " }; settings.Normalize();
-			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); Equal(OverlayTextStyle.Outlined, settings.TextStyle, "outlined text is the default fallback"); Equal("#68236F", settings.TierBackgroundColor, "tier background defaults to purple"); False(settings.ShowEncounterCounts, "counts hidden by default"); True(settings.ShowLastCombatDamage, "damage visible by default"); Equal(CounterSide.Left, settings.CounterSide, "tier badges default to the left"); Equal(TavernTierStyle.Shield, settings.TierStyle, "shields are the default tier style"); True(settings.HighlightLastOpponent, "highlight visible by default"); False(settings.ColorLastOpponentByCombatResult, "result coloring is opt-in"); True(settings.HideOverlayWhenHearthstoneIsNotFocused, "overlay hides outside Hearthstone by default"); Equal("Blue", settings.WinTextColor, "default win color"); Equal("Red", settings.LossTextColor, "default loss color"); Equal("Yellow", settings.DrawTextColor, "default draw color");
+			var settings = new OpponentMemorySettings { Scale = 9, TextOpacity = -1, FontSize = double.NaN, TextStyle = (OverlayTextStyle)99, TierBackgroundColor = "  ", TavernTierPulseDurationSeconds = 99 }; settings.Normalize();
+			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); Equal(OverlayTextStyle.Outlined, settings.TextStyle, "outlined text is the default fallback"); Equal("#68236F", settings.TierBackgroundColor, "tier background defaults to purple"); True(settings.PulseOnTavernTierUpgrade, "tier pulse enabled by default"); Equal(3d, settings.TavernTierPulseDurationSeconds, "tier pulse duration defaults to 3 seconds"); False(settings.ShowEncounterCounts, "counts hidden by default"); True(settings.ShowLastCombatDamage, "damage visible by default"); Equal(CounterSide.Left, settings.CounterSide, "tier badges default to the left"); Equal(TavernTierStyle.Shield, settings.TierStyle, "shields are the default tier style"); True(settings.HighlightLastOpponent, "highlight visible by default"); False(settings.ColorLastOpponentByCombatResult, "result coloring is opt-in"); True(settings.HideOverlayWhenHearthstoneIsNotFocused, "overlay hides outside Hearthstone by default"); Equal("Blue", settings.WinTextColor, "default win color"); Equal("Red", settings.LossTextColor, "default loss color"); Equal("Yellow", settings.DrawTextColor, "default draw color");
 			var copy = new OpponentMemorySettings(); copy.CopyFrom(new OpponentMemorySettings { HideOverlayWhenHearthstoneIsNotFocused = false, TierBackgroundColor = "#112233" }); False(copy.HideOverlayWhenHearthstoneIsNotFocused, "focus setting is copied"); Equal("#112233", copy.TierBackgroundColor, "tier background color is copied");
 		}
 
@@ -227,12 +228,61 @@ namespace OpponentMemory.Tests
 		{
 			Equal<int?>(null, new LeaderboardPlayer(2, 1, false, false).TavernTier, "missing tier stays unknown");
 			Equal<int?>(7, new LeaderboardPlayer(2, 1, false, false, 7).TavernTier, "seventh tier is supported");
-			var settings = new OpponentMemorySettings { ShowOpponentTavernTier = false, OpponentInfoSize = 32, OpponentInfoSpacing = 12 };
+			var settings = new OpponentMemorySettings { ShowOpponentTavernTier = false, PulseOnTavernTierUpgrade = false, TavernTierPulseDurationSeconds = 5, OpponentInfoSize = 32, OpponentInfoSpacing = 12 };
 			var copy = new OpponentMemorySettings();
 			copy.CopyFrom(settings);
 			False(copy.ShowOpponentTavernTier, "tier visibility is copied");
+			False(copy.PulseOnTavernTierUpgrade, "tier pulse toggle is copied");
+			Equal(5d, copy.TavernTierPulseDurationSeconds, "tier pulse duration is copied");
 			Equal(32d, copy.OpponentInfoSize, "badge size is copied");
 			Equal(12d, copy.OpponentInfoSpacing, "badge spacing is copied");
+		}
+
+		private static void TavernTierPulseTracksChangesAndStopsAtRoundStart()
+		{
+			var pulse = new TavernTierPulseTracker();
+			var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+			var initial = new[]
+			{
+				new LeaderboardPlayer(1, 1, true, false, 1),
+				new LeaderboardPlayer(2, 2, false, false, 1),
+				new LeaderboardPlayer(3, 3, false, false, 1)
+			};
+			False(pulse.Update(initial, 1, false, true, 3, now), "initial tier observation does not pulse");
+			False(pulse.IsPulsing(2, now), "opponent does not pulse on initial reveal");
+
+			var upgraded = new[]
+			{
+				new LeaderboardPlayer(1, 1, true, false, 2),
+				new LeaderboardPlayer(2, 2, false, false, 2),
+				new LeaderboardPlayer(3, 3, false, false, 1)
+			};
+			True(pulse.Update(upgraded, 1, false, true, 3, now.AddSeconds(1)), "opponent tier change starts a pulse");
+			False(pulse.IsPulsing(1, now.AddSeconds(1)), "local player does not pulse");
+			True(pulse.IsPulsing(2, now.AddSeconds(1)), "upgraded opponent pulses");
+			True(pulse.IsPulsing(2, now.AddSeconds(3.5)), "pulse stays active within configured duration");
+			True(pulse.Update(upgraded, 1, false, true, 3, now.AddSeconds(4)), "expired pulse notifies state change");
+			False(pulse.IsPulsing(2, now.AddSeconds(4)), "pulse stops after configured duration");
+
+			var secondUpgrade = new[]
+			{
+				new LeaderboardPlayer(1, 1, true, false, 2),
+				new LeaderboardPlayer(2, 2, false, false, 2),
+				new LeaderboardPlayer(3, 3, false, false, 2)
+			};
+			True(pulse.Update(secondUpgrade, 1, false, true, 3, now.AddSeconds(5)), "later upgrade starts a new pulse");
+			True(pulse.Update(secondUpgrade, 1, true, true, 3, now.AddSeconds(5.5)), "starting combat cancels active pulses immediately");
+			False(pulse.IsPulsing(3, now.AddSeconds(5.5)), "pulse is cleared when combat starts");
+
+			var nextRound = new[]
+			{
+				new LeaderboardPlayer(1, 1, true, false, 2),
+				new LeaderboardPlayer(2, 2, false, false, 2),
+				new LeaderboardPlayer(3, 3, false, false, 3)
+			};
+			True(pulse.Update(nextRound, 2, false, true, 3, now.AddSeconds(10)), "shopping in next round pulses new upgrades");
+			True(pulse.Update(nextRound, 3, false, true, 3, now.AddSeconds(11)), "advancing round stops unfinished pulses");
+			False(pulse.IsPulsing(3, now.AddSeconds(11)), "unfinished pulse stops when a new round starts");
 		}
 
 		private static void StandardLeaderboardWaitsForEightPlayers()

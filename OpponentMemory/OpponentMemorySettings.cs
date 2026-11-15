@@ -25,6 +25,8 @@ namespace OpponentMemory
 		public bool ShowEncounterCounts { get; set; }
 		public bool ShowLastCombatDamage { get; set; } = true;
 		public bool ShowOpponentTavernTier { get; set; } = true;
+		public bool PulseOnTavernTierUpgrade { get; set; } = true;
+		public double TavernTierPulseDurationSeconds { get; set; } = 3;
 		public double OpponentInfoSize { get; set; } = 26;
 		public TavernTierStyle TierStyle { get; set; } = TavernTierStyle.Shield;
 		public string TierBackgroundColor { get; set; } = "#68236F";
@@ -49,6 +51,7 @@ namespace OpponentMemory
 		{
 			if(string.IsNullOrWhiteSpace(TierBackgroundColor)) TierBackgroundColor = "#68236F";
 			if(!Enum.IsDefined(typeof(TavernTierStyle), TierStyle)) TierStyle = TavernTierStyle.Shield;
+			TavernTierPulseDurationSeconds = Clamp(TavernTierPulseDurationSeconds, .5, 10, 3);
 			OpponentInfoSize = Clamp(OpponentInfoSize, 16, 48, 26);
 			OpponentInfoSpacing = Clamp(OpponentInfoSpacing, 0, 30, 6);
 			HorizontalOffset = Clamp(HorizontalOffset, -300, 300, 8);
@@ -74,6 +77,8 @@ namespace OpponentMemory
 			TierBackgroundColor = source.TierBackgroundColor;
 			TierStyle = source.TierStyle;
 			ShowOpponentTavernTier = source.ShowOpponentTavernTier;
+			PulseOnTavernTierUpgrade = source.PulseOnTavernTierUpgrade;
+			TavernTierPulseDurationSeconds = source.TavernTierPulseDurationSeconds;
 			OpponentInfoSize = source.OpponentInfoSize;
 			OpponentInfoSpacing = source.OpponentInfoSpacing;
 			Enabled = source.Enabled;

@@ -27,10 +27,10 @@ namespace OpponentMemory
 		private TextBlock _versionText = null!;
 		private CancellationTokenSource? _updateCancellation;
 		private bool _windowClosed;
-		private CheckBox _tavernTier = null!;
+		private CheckBox _tavernTier = null!, _pulseOnTierChange = null!;
 		private ComboBox _tierStyle = null!;
 		private ComboBox _tierBackground = null!;
-		private Slider _infoSize = null!, _infoSpacing = null!;
+		private Slider _infoSize = null!, _infoSpacing = null!, _tierPulseDuration = null!;
 
 		public SettingsWindow(OpponentMemorySettings settings, Action apply, Version installedVersion)
 		{
@@ -258,19 +258,26 @@ namespace OpponentMemory
 		{
 			var panel = NewPanel();
 			_tavernTier = AddCheck(panel, "Show opponent tavern tier", _draft.ShowOpponentTavernTier);
+			_pulseOnTierChange = AddCheck(panel, "Pulse badge on tavern tier change", _draft.PulseOnTavernTierUpgrade);
+			_tavernTier.Checked += (_, __) => UpdateOpponentInfoControls(); _tavernTier.Unchecked += (_, __) => UpdateOpponentInfoControls();
+			_pulseOnTierChange.Checked += (_, __) => UpdateOpponentInfoControls(); _pulseOnTierChange.Unchecked += (_, __) => UpdateOpponentInfoControls();
+			_tierPulseDuration = AddSlider(panel, "Tier pulse duration", .5, 10, .5, _draft.TavernTierPulseDurationSeconds, "s");
+			UpdateOpponentInfoControls();
 			AddLabel(panel, "Tier display style");
 			_tierStyle = new ComboBox { ItemsSource = Enum.GetValues(typeof(TavernTierStyle)), SelectedItem = _draft.TierStyle, Margin = new Thickness(0, 0, 0, 12) };
 			panel.Children.Add(_tierStyle);
 			_tierBackground = AddColorPicker(panel, "Shield and hexagon background color", _draft.TierBackgroundColor);
 			_infoSize = AddSlider(panel, "Tier badge size", 16, 48, 1, _draft.OpponentInfoSize);
 			_infoSpacing = AddSlider(panel, "Space before combat damage", 0, 30, 1, _draft.OpponentInfoSpacing);
-			panel.Children.Add(new TextBlock { Text = "Choose dice with dots (Dice), dice with a number (DiceNumber), a shield with stars, or a hexagon with a number. With encounter counts hidden, tier badges replace the counters and damage stays on the opposite side. Dice are black; shields and hexagons use their own background color. Last-opponent colors apply to all styles; a gold border marks the next opponent. Unknown tiers stay hidden.", TextWrapping = TextWrapping.Wrap, Opacity = .7, Margin = new Thickness(0, 8, 0, 16) });
+			panel.Children.Add(new TextBlock { Text = "Choose dice with dots (Dice), dice with a number (DiceNumber), a shield with stars, or a hexagon with a number. With encounter counts hidden, tier badges replace the counters and damage stays on the opposite side. Dice are black; shields and hexagons use their own background color. Last-opponent colors apply to all styles; a gold border marks the next opponent. Tier badges blink and pulse for the configured duration when an opponent changes tier, and stop when combat or a new round starts. Unknown tiers stay hidden.", TextWrapping = TextWrapping.Wrap, Opacity = .7, Margin = new Thickness(0, 8, 0, 16) });
 			return new ScrollViewer { Content = panel };
 		}
 
 		private void ApplyDraft()
 		{
 			_draft.ShowOpponentTavernTier = _tavernTier.IsChecked == true;
+			_draft.PulseOnTavernTierUpgrade = _pulseOnTierChange.IsChecked == true;
+			_draft.TavernTierPulseDurationSeconds = _tierPulseDuration.Value;
 			_draft.TierStyle = _tierStyle.SelectedItem is TavernTierStyle style ? style : TavernTierStyle.Shield;
 			_draft.TierBackgroundColor = ColorValue(_tierBackground);
 			_draft.OpponentInfoSize = _infoSize.Value;
@@ -289,6 +296,9 @@ namespace OpponentMemory
 		private void Populate()
 		{
 			_tavernTier.IsChecked = _draft.ShowOpponentTavernTier;
+			_pulseOnTierChange.IsChecked = _draft.PulseOnTavernTierUpgrade;
+			_tierPulseDuration.Value = _draft.TavernTierPulseDurationSeconds;
+			UpdateOpponentInfoControls();
 			_tierStyle.SelectedItem = _draft.TierStyle;
 			SelectColor(_tierBackground, _draft.TierBackgroundColor);
 			_infoSize.Value = _draft.OpponentInfoSize;
@@ -333,6 +343,15 @@ namespace OpponentMemory
 		private static readonly string[] ColorOptions = { "Transparent", "White", "Black", "Red", "Green", "Blue", "Yellow", "Orange", "Purple", "Pink", "Cyan", "Lime", "Gold" };
 		private static string ColorValue(ComboBox picker) => string.IsNullOrWhiteSpace(picker.Text) ? "Transparent" : picker.Text;
 		private static void SelectColor(ComboBox picker, string value) { picker.SelectedItem = value; picker.Text = value; }
+		private void UpdateOpponentInfoControls()
+		{
+			if(_tavernTier == null || _pulseOnTierChange == null || _tierPulseDuration == null)
+				return;
+			var tierEnabled = _tavernTier.IsChecked == true;
+			_pulseOnTierChange.IsEnabled = tierEnabled;
+			_tierPulseDuration.IsEnabled = tierEnabled && _pulseOnTierChange.IsChecked == true;
+		}
+
 		private void UpdateColorControls()
 		{
 			if(_damage == null || _highlight == null || _resultColors == null || _resultColorsInColors == null || _last == null || _win == null || _loss == null || _draw == null || _colorWarning == null)

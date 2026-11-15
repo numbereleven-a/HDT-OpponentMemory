@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 namespace OpponentMemory
 {
@@ -18,18 +19,28 @@ namespace OpponentMemory
 		private static readonly Pen StarBorderPen = FrozenPen(Brushes.Black, .55);
 		private static readonly Pen PipBorderPen = FrozenPen(Brushes.Black, .6);
 		private static readonly Geometry[][] TierStars = BuildTierStars();
+		private static readonly IEasingFunction PulseEase = FrozenEase();
+		private static readonly DoubleAnimation ScalePulseAnimation = FrozenScalePulseAnimation();
+		private readonly ScaleTransform _pulseTransform = new ScaleTransform(1, 1);
 		private int _tier;
 		private double _size;
+		private double _baseOpacity = 1;
 		private Brush _color = Brushes.Purple;
 		private bool _scheduled;
+		private bool _isPulsing;
 		private TavernTierStyle _style;
 		private ScaleTransform _scaleTransform = Transform.Identity as ScaleTransform ?? new ScaleTransform(1, 1);
-		public TavernTierBadge() => IsHitTestVisible = false;
 
-		public void Configure(int tier, double size, double opacity, Brush color, bool scheduled, TavernTierStyle style)
+		public TavernTierBadge()
 		{
-			if(Math.Abs(Opacity - opacity) >= .001)
-				Opacity = opacity;
+			IsHitTestVisible = false;
+			RenderTransformOrigin = new Point(.5, .5);
+			RenderTransform = _pulseTransform;
+		}
+
+		public void Configure(int tier, double size, double opacity, Brush color, bool scheduled, TavernTierStyle style, bool isPulsing = false)
+		{
+			UpdatePulse(opacity, isPulsing);
 			if(_tier == tier && Math.Abs(_size - size) < .001 && ReferenceEquals(_color, color) && _scheduled == scheduled && _style == style) return;
 			if(Math.Abs(_size - size) >= .001)
 			{
@@ -44,6 +55,73 @@ namespace OpponentMemory
 			_style = style;
 			Width = Height = size;
 			InvalidateVisual();
+		}
+
+		public void StopPulse()
+		{
+			if(!_isPulsing)
+				return;
+			_isPulsing = false;
+			_pulseTransform.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+			_pulseTransform.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+			_pulseTransform.ScaleX = 1;
+			_pulseTransform.ScaleY = 1;
+			BeginAnimation(OpacityProperty, null);
+			Opacity = _baseOpacity;
+		}
+
+		private void UpdatePulse(double opacity, bool isPulsing)
+		{
+			var opacityChanged = Math.Abs(_baseOpacity - opacity) >= .001;
+			_baseOpacity = opacity;
+			if(!isPulsing)
+			{
+				StopPulse();
+				if(Math.Abs(Opacity - opacity) >= .001)
+					Opacity = opacity;
+				return;
+			}
+			if(!_isPulsing)
+			{
+				_isPulsing = true;
+				_pulseTransform.BeginAnimation(ScaleTransform.ScaleXProperty, ScalePulseAnimation);
+				_pulseTransform.BeginAnimation(ScaleTransform.ScaleYProperty, ScalePulseAnimation);
+				StartOpacityPulse(opacity);
+				return;
+			}
+			if(opacityChanged)
+				StartOpacityPulse(opacity);
+		}
+
+		private void StartOpacityPulse(double baseOpacity)
+		{
+			var opacityPulse = new DoubleAnimation(baseOpacity, baseOpacity * .25, new Duration(TimeSpan.FromMilliseconds(350)))
+			{
+				AutoReverse = true,
+				RepeatBehavior = RepeatBehavior.Forever,
+				EasingFunction = PulseEase
+			};
+			if(opacityPulse.CanFreeze) opacityPulse.Freeze();
+			BeginAnimation(OpacityProperty, opacityPulse);
+		}
+
+		private static IEasingFunction FrozenEase()
+		{
+			var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
+			ease.Freeze();
+			return ease;
+		}
+
+		private static DoubleAnimation FrozenScalePulseAnimation()
+		{
+			var animation = new DoubleAnimation(1, 1.28, new Duration(TimeSpan.FromMilliseconds(350)))
+			{
+				AutoReverse = true,
+				RepeatBehavior = RepeatBehavior.Forever,
+				EasingFunction = PulseEase
+			};
+			animation.Freeze();
+			return animation;
 		}
 
 		protected override void OnRender(DrawingContext context)

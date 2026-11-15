@@ -20,6 +20,7 @@ namespace OpponentMemory
 		private readonly BattlegroundsPlayerResolver _resolver = new BattlegroundsPlayerResolver();
 		private readonly OpponentMemoryOverlay _overlay = new OpponentMemoryOverlay();
 		private readonly LeaderboardReadiness _leaderboardReadiness = new LeaderboardReadiness();
+		private readonly TavernTierPulseTracker _pulseTracker = new TavernTierPulseTracker();
 		private readonly MatchIdentityRecovery _matchIdentityRecovery = new MatchIdentityRecovery();
 		private OpponentMemorySettings _settings = new OpponentMemorySettings();
 		private SettingsWindow? _settingsWindow;
@@ -58,7 +59,7 @@ namespace OpponentMemory
 			"GitHub: https://github.com/numbereleven-a/HDT-OpponentMemory";
 		public string ButtonText => "Settings";
 		public string Author => "numbereleven-a";
-		public Version Version => new Version(1, 8, 2);
+		public Version Version => new Version(1, 8, 3);
 		public MenuItem MenuItem => _menuItem ??= BuildMenu();
 
 		public void OnLoad()
@@ -162,6 +163,11 @@ namespace OpponentMemory
 				else if(!_combatCompletionGate.IsPending)
 					_tracker.Schedule(round, scheduled, GetScheduledGhostStatus(round, scheduled, false));
 				_wasCombat = combat;
+				var nowUtc = DateTime.UtcNow;
+				var players = _resolver.GetLeaderboardPlayers();
+				var leaderboardReady = _leaderboardReadiness.IsReady(players, _resolver.RequiresEightPlayerLeaderboard(), nowUtc);
+				if(leaderboardReady && _pulseTracker.Update(players, round, combat, _settings.PulseOnTavernTierUpgrade, _settings.TavernTierPulseDurationSeconds, nowUtc))
+					_forceOverlayRefresh = true;
 				if(_settings.HideOverlayWhenHearthstoneIsNotFocused && !User32.IsHearthstoneInForeground())
 				{
 					if(!_overlayHiddenForBackground)
@@ -178,9 +184,8 @@ namespace OpponentMemory
 				{
 					_forceOverlayRefresh = false;
 					_overlayRefresh.Restart();
-					var players = _resolver.GetLeaderboardPlayers();
-					if(_leaderboardReadiness.IsReady(players, _resolver.RequiresEightPlayerLeaderboard(), DateTime.UtcNow))
-						InvokeUi(() => _overlay.Update(players, _tracker, _lastCombatOutcome, _lastCombatDamage, _settings, scheduled));
+					if(leaderboardReady)
+						InvokeUi(() => _overlay.Update(players, _tracker, _pulseTracker, _lastCombatOutcome, _lastCombatDamage, _settings, scheduled, nowUtc));
 					else
 						InvokeUi(_overlay.Hide);
 				}
@@ -385,6 +390,7 @@ namespace OpponentMemory
 			_wasCombat = null;
 			_wasSupported = false;
 			_leaderboardReadiness.Reset();
+			_pulseTracker.Reset();
 			_matchIdentityRecovery.Reset();
 			ResetGhostStatusCache();
 			_forceOverlayRefresh = true;
@@ -412,6 +418,7 @@ namespace OpponentMemory
 			_sawMenu = false;
 			_gameHandle = null;
 			_leaderboardReadiness.Reset();
+			_pulseTracker.Reset();
 			_matchIdentityRecovery.Reset();
 			ResetGhostStatusCache();
 		}
