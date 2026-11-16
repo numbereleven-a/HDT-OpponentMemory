@@ -121,7 +121,7 @@ namespace OpponentMemory
 					var color = settings.HighlightLastOpponent && isLastOpponent ? GetLastOpponentBrush(settings, lastCombatOutcome, opaque: true)
 						: settings.TierStyle == TavernTierStyle.Dice || settings.TierStyle == TavernTierStyle.DiceNumber ? Brushes.Black : _tierBackgroundBrush;
 					var isPulsing = settings.PulseOnTavernTierUpgrade && pulseTracker.IsPulsing(player.PlayerId, nowUtc);
-					tierRow.Configure(player.TavernTier!.Value, size, settings.TextOpacity / 100d, color, isScheduledOpponent, settings.TierStyle, isPulsing);
+					tierRow.Configure(player.TavernTier!.Value, size, settings.TextOpacity / 100d, color, isScheduledOpponent, settings.TierStyle, isPulsing, settings.StrongTavernTierPulse);
 					var left = infoSide == CounterSide.Left ? portraitLeft - settings.HorizontalOffset - size : portraitLeft + tileHeight + settings.HorizontalOffset;
 					left += rowIndex * settings.PerRowHorizontalOffset;
 					if(infoSide == CounterSide.Right && isScheduledOpponent) left += settings.NextOpponentExtraOffset;

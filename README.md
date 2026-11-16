@@ -40,7 +40,7 @@ For the Windows version of HDT. Solo Battlegrounds only.
 
 By default, purple shields with gold stars show opponent tavern tiers on the left of the portraits. Seven stars or dots represent tier 7. You can choose dice with dots, dice with a number, or a hexagon with a number instead.
 
-Tiers refresh as HDT receives new values, including during shopping. Unknown values stay hidden. The plugin does not predict upgrades or reveal changes before HDT receives them. By default, an opponent's tier badge blinks and pulses for 3 seconds when their tier changes, and stops immediately if combat or a new round starts.
+Tiers refresh as HDT receives new values, including during shopping. Unknown values stay hidden. The plugin does not predict upgrades or reveal changes before HDT receives them. By default, an opponent's tier badge pulses brightly for 3 seconds when their tier changes (with a subtler pulse option available in settings), finishes its current pulse cycle smoothly back to normal, and stops when combat or a new round starts.
 
 ### Previous and next opponents
 
@@ -69,7 +69,7 @@ Open `Options -> Tracker -> Plugins -> Opponent Memory -> Settings`.
 * **General:** encounter counts, last combat damage, highlighting, placement side, ghost encounters, and hiding the overlay when Hearthstone is not in focus
 * **Visual:** positioning, per-row alignment, scale, font, text style, and opacity
 * **Colors:** normal text, last-opponent, combat-result, and background colors
-* **Opponent info:** tavern tier visibility, tier-change pulse toggle and duration, badge style, shield and hexagon background color, size, and spacing before damage
+* **Opponent info:** tavern tier visibility, tier-change pulse toggle, stronger pulse animation toggle, pulse duration, badge style, shield and hexagon background color, size, and spacing before damage
 
 The default layout uses shields on the left, hidden encounter counts, and last combat damage on the right. Existing settings are preserved when upgrading; use **Reset settings**, then **Apply**, to use the new defaults.
 

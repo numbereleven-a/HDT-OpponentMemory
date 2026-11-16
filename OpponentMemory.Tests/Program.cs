@@ -220,7 +220,7 @@ namespace OpponentMemory.Tests
 		private static void SettingsAreClamped()
 		{
 			var settings = new OpponentMemorySettings { Scale = 9, TextOpacity = -1, FontSize = double.NaN, TextStyle = (OverlayTextStyle)99, TierBackgroundColor = "  ", TavernTierPulseDurationSeconds = 99 }; settings.Normalize();
-			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); Equal(OverlayTextStyle.Outlined, settings.TextStyle, "outlined text is the default fallback"); Equal("#68236F", settings.TierBackgroundColor, "tier background defaults to purple"); True(settings.PulseOnTavernTierUpgrade, "tier pulse enabled by default"); Equal(3d, settings.TavernTierPulseDurationSeconds, "tier pulse duration defaults to 3 seconds"); False(settings.ShowEncounterCounts, "counts hidden by default"); True(settings.ShowLastCombatDamage, "damage visible by default"); Equal(CounterSide.Left, settings.CounterSide, "tier badges default to the left"); Equal(TavernTierStyle.Shield, settings.TierStyle, "shields are the default tier style"); True(settings.HighlightLastOpponent, "highlight visible by default"); False(settings.ColorLastOpponentByCombatResult, "result coloring is opt-in"); True(settings.HideOverlayWhenHearthstoneIsNotFocused, "overlay hides outside Hearthstone by default"); Equal("Blue", settings.WinTextColor, "default win color"); Equal("Red", settings.LossTextColor, "default loss color"); Equal("Yellow", settings.DrawTextColor, "default draw color");
+			Equal(1d, settings.Scale, "scale fallback"); Equal(100d, settings.TextOpacity, "opacity fallback"); Equal(22d, settings.FontSize, "font fallback"); Equal(OverlayTextStyle.Outlined, settings.TextStyle, "outlined text is the default fallback"); Equal("#68236F", settings.TierBackgroundColor, "tier background defaults to purple"); True(settings.PulseOnTavernTierUpgrade, "tier pulse enabled by default"); True(settings.StrongTavernTierPulse, "strong tier pulse enabled by default"); Equal(3d, settings.TavernTierPulseDurationSeconds, "tier pulse duration defaults to 3 seconds"); False(settings.ShowEncounterCounts, "counts hidden by default"); True(settings.ShowLastCombatDamage, "damage visible by default"); Equal(CounterSide.Left, settings.CounterSide, "tier badges default to the left"); Equal(TavernTierStyle.Shield, settings.TierStyle, "shields are the default tier style"); True(settings.HighlightLastOpponent, "highlight visible by default"); False(settings.ColorLastOpponentByCombatResult, "result coloring is opt-in"); True(settings.HideOverlayWhenHearthstoneIsNotFocused, "overlay hides outside Hearthstone by default"); Equal("Blue", settings.WinTextColor, "default win color"); Equal("Red", settings.LossTextColor, "default loss color"); Equal("Yellow", settings.DrawTextColor, "default draw color");
 			var copy = new OpponentMemorySettings(); copy.CopyFrom(new OpponentMemorySettings { HideOverlayWhenHearthstoneIsNotFocused = false, TierBackgroundColor = "#112233" }); False(copy.HideOverlayWhenHearthstoneIsNotFocused, "focus setting is copied"); Equal("#112233", copy.TierBackgroundColor, "tier background color is copied");
 		}
 
@@ -228,11 +228,12 @@ namespace OpponentMemory.Tests
 		{
 			Equal<int?>(null, new LeaderboardPlayer(2, 1, false, false).TavernTier, "missing tier stays unknown");
 			Equal<int?>(7, new LeaderboardPlayer(2, 1, false, false, 7).TavernTier, "seventh tier is supported");
-			var settings = new OpponentMemorySettings { ShowOpponentTavernTier = false, PulseOnTavernTierUpgrade = false, TavernTierPulseDurationSeconds = 5, OpponentInfoSize = 32, OpponentInfoSpacing = 12 };
+			var settings = new OpponentMemorySettings { ShowOpponentTavernTier = false, PulseOnTavernTierUpgrade = false, StrongTavernTierPulse = false, TavernTierPulseDurationSeconds = 5, OpponentInfoSize = 32, OpponentInfoSpacing = 12 };
 			var copy = new OpponentMemorySettings();
 			copy.CopyFrom(settings);
 			False(copy.ShowOpponentTavernTier, "tier visibility is copied");
 			False(copy.PulseOnTavernTierUpgrade, "tier pulse toggle is copied");
+			False(copy.StrongTavernTierPulse, "strong tier pulse toggle is copied");
 			Equal(5d, copy.TavernTierPulseDurationSeconds, "tier pulse duration is copied");
 			Equal(32d, copy.OpponentInfoSize, "badge size is copied");
 			Equal(12d, copy.OpponentInfoSpacing, "badge spacing is copied");

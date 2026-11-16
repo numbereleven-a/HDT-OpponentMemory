@@ -26,6 +26,7 @@ namespace OpponentMemory
 		public bool ShowLastCombatDamage { get; set; } = true;
 		public bool ShowOpponentTavernTier { get; set; } = true;
 		public bool PulseOnTavernTierUpgrade { get; set; } = true;
+		public bool StrongTavernTierPulse { get; set; } = true;
 		public double TavernTierPulseDurationSeconds { get; set; } = 3;
 		public double OpponentInfoSize { get; set; } = 26;
 		public TavernTierStyle TierStyle { get; set; } = TavernTierStyle.Shield;
@@ -78,6 +79,7 @@ namespace OpponentMemory
 			TierStyle = source.TierStyle;
 			ShowOpponentTavernTier = source.ShowOpponentTavernTier;
 			PulseOnTavernTierUpgrade = source.PulseOnTavernTierUpgrade;
+			StrongTavernTierPulse = source.StrongTavernTierPulse;
 			TavernTierPulseDurationSeconds = source.TavernTierPulseDurationSeconds;
 			OpponentInfoSize = source.OpponentInfoSize;
 			OpponentInfoSpacing = source.OpponentInfoSpacing;
