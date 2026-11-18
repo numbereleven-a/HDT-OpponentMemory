@@ -1,5 +1,12 @@
 # Opponent Memory
 
+> [!WARNING]
+> **Hearthstone Deck Tracker (HDT) is ending plugin support on November 30, 2026.**
+>
+> Starting on that date, HDT will no longer load installed plugins or allow new plugins to be installed.
+>
+> [Read HearthSim’s official announcement](https://help.hearthsim.net/en/articles/18470784-what-s-changing-about-plugins-in-hdt)
+
 Opponent Memory is a plugin for [Hearthstone Deck Tracker](https://github.com/HearthSim/Hearthstone-Deck-Tracker) that shows opponent tavern tiers, highlights your most recent opponent, and tracks completed encounters in Solo Battlegrounds.
 
 See tavern tiers at a glance, quickly find your previous opponent when checking their last known warband, and optionally use encounter counts to help estimate who you might face next.
